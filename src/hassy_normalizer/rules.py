@@ -113,17 +113,22 @@ def apply_letter_rules(word: str, _hash: Optional[int] = None) -> str:
     Apply letter-level normalisation in two ordered steps:
 
     1. گ/ق → ك   (skip if word is in the exceptions list)
-    2. Final taa-marbuuṭa (ة) → haa (ه)  — always applied last
+    2. Final taa-marbuuṭa (ة) → haa (ه)  — always applied last (but respect exceptions)
     """
     exceptions = _get_exceptions()
+    original_word = word
 
     # Step 1  (protected by exceptions)
     if word not in exceptions:
         word = word.replace("گ", "ك").replace("ق", "ك")
 
-    # Step 2 (unconditional)
+    # Step 2 (conditional - respect exceptions for both original and converted forms)
     if word.endswith("ة"):
-        word = word[:-1] + "ه"
+        # Check if either the original word or the ه-form is in exceptions
+        haa_form = word[:-1] + "ه"
+        if original_word not in exceptions and haa_form not in exceptions:
+            word = haa_form
+        # If either form is in exceptions, keep the current form (which may have had ق→ك applied)
 
     return word
 
