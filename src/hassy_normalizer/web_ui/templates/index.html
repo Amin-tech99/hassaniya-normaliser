@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hassaniya Arabic Normalizer</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    
+    <!-- Font for Arabic text -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <header class="row bg-primary text-white py-3 mb-4">
+            <div class="col">
+                <h1 class="h3 mb-0">
+                    <i class="bi bi-translate"></i>
+                    Hassaniya Arabic Normalizer
+                </h1>
+                <small class="text-light">Version {{ version }}</small>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <main class="row">
+            <div class="col-lg-8 mx-auto">
+                
+                <!-- Input Section -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-pencil-square"></i>
+                            Input Text
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <textarea 
+                                id="inputText" 
+                                class="form-control arabic-text" 
+                                rows="6" 
+                                placeholder="Enter Hassaniya Arabic text here..."
+                                dir="rtl"
+                            ></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button id="normalizeBtn" class="btn btn-primary">
+                                <i class="bi bi-arrow-right-circle"></i>
+                                Normalize Text
+                            </button>
+                            <button id="clearBtn" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i>
+                                Clear
+                            </button>
+                            <button id="exampleBtn" class="btn btn-outline-info">
+                                <i class="bi bi-lightbulb"></i>
+                                Load Example
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Accordion -->
+                <div class="accordion" id="resultsAccordion">
+                    
+                    <!-- Output Section -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#outputSection">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Normalized Output
+                            </button>
+                        </h2>
+                        <div id="outputSection" class="accordion-collapse collapse show" data-bs-parent="#resultsAccordion">
+                            <div class="accordion-body">
+                                <div id="outputText" class="output-text arabic-text" dir="rtl">
+                                    <div class="text-muted text-center py-4">
+                                        <i class="bi bi-arrow-up"></i>
+                                        Normalized text will appear here
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Diff Section -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#diffSection">
+                                <i class="bi bi-eye me-2"></i>
+                                Changes Highlighted
+                            </button>
+                        </h2>
+                        <div id="diffSection" class="accordion-collapse collapse" data-bs-parent="#resultsAccordion">
+                            <div class="accordion-body">
+                                <div id="diffText" class="diff-text arabic-text" dir="rtl">
+                                    <div class="text-muted text-center py-4">
+                                        <i class="bi bi-arrow-up"></i>
+                                        Changes will be highlighted here
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Section -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#statsSection">
+                                <i class="bi bi-graph-up me-2"></i>
+                                Statistics
+                            </button>
+                        </h2>
+                        <div id="statsSection" class="accordion-collapse collapse" data-bs-parent="#resultsAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <div class="stat-card">
+                                            <div class="stat-value" id="totalWords">-</div>
+                                            <div class="stat-label">Total Words</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card">
+                                            <div class="stat-value" id="changedWords">-</div>
+                                            <div class="stat-label">Changed</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card">
+                                            <div class="stat-value" id="changePercentage">-</div>
+                                            <div class="stat-label">Change %</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card">
+                                            <div class="stat-value" id="processingTime">-</div>
+                                            <div class="stat-label">Time (ms)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loading Spinner -->
+                <div id="loadingSpinner" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Processing...</span>
+                    </div>
+                    <div class="mt-2">Normalizing text...</div>
+                </div>
+                
+            </div>
+        </main>
+        
+        <!-- Footer -->
+        <footer class="row mt-5 py-4 bg-light">
+            <div class="col text-center text-muted">
+                <p class="mb-1">
+                    <strong>Hassaniya Arabic Normalizer</strong> - 
+                    Normalize Hassaniya Arabic text with variant handling and letter rules
+                </p>
+                <p class="mb-0">
+                    <small>
+                        <a href="/api/stats" class="text-decoration-none">API Stats</a> |
+                        <a href="/healthz" class="text-decoration-none">Health Check</a>
+                    </small>
+                </p>
+            </div>
+        </footer>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="errorToast" class="toast" role="alert">
+            <div class="toast-header bg-danger text-white">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong class="me-auto">Error</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="errorMessage">
+                An error occurred
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

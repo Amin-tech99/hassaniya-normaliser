@@ -1,0 +1,9 @@
+Exception count: 7349
+Input: القضية
+Output: الكضيه
+Status: FAIL
+
+القضية -> الكضيه (FAIL)
+قادية -> قاديه (FAIL)
+أحق -> أحق (PASS)
+أرقام -> أرقام (PASS)

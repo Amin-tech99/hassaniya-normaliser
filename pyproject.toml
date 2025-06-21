@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hassy-normalizer"
+version = "0.1.0"
+description = "Hassaniya Arabic text normalizer with variant handling and letter rules"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Hassaniya Normalizer Team", email = "contact@example.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Text Processing :: Linguistic",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "flask>=2.3.0",
+    "rich>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=22.0.0",
+    "ruff>=0.1.0",
+    "bumpver>=2023.1129",
+]
+web = [
+    "flask>=2.3.0",
+    "werkzeug>=2.3.0",
+]
+
+[project.scripts]
+hassy-normalize = "hassy_normalizer.cli:main"
+hassy-web = "hassy_normalizer.web_ui.server:main"
+
+[project.urls]
+Homepage = "https://github.com/example/hassaniya-normalizer"
+Repository = "https://github.com/example/hassaniya-normalizer"
+Issues = "https://github.com/example/hassaniya-normalizer/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"hassy_normalizer" = ["data/*.json", "data/*.jsonl"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.ruff]
+select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "EM", "EXE", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = ["E501", "S101"]
+line-length = 88
+target-version = "py39"
+
+[tool.bumpver]
+current_version = "0.1.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump version {old_version} -> {new_version}"
+commit = true
+tag = true
+push = false
+
+[[tool.bumpver.files]]
+filename = "pyproject.toml"
+search = 'version = "{version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpver.files]]
+filename = "src/hassy_normalizer/__init__.py"
+search = '__version__ = "{version}"'
+replace = '__version__ = "{new_version}"'
+
+[[tool.bumpver.files]]
+filename = "CHANGELOG.md"
+search = "## [Unreleased]"
+replace = "## [Unreleased]\n\n## [{new_version}] - {utcnow:%Y-%m-%d}"
