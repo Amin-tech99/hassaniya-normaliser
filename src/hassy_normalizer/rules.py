@@ -48,6 +48,35 @@ def _load_exception_words() -> Set[str]:
     return set(data)
 
 
+def _expand_taa_haa_variants(base_exceptions: Set[str]) -> Set[str]:
+    """Expand exception words to include both ة and ه variants.
+    
+    For each word ending in ة or ه, automatically add the other variant
+    to ensure exceptions work regardless of which form is used.
+    
+    Args:
+        base_exceptions: Original set of exception words
+        
+    Returns:
+        Expanded set including both ة and ه variants
+    """
+    expanded = set(base_exceptions)
+    
+    for word in base_exceptions:
+        if word.endswith('ة'):
+            # Add ه variant: القضية -> القضيه
+            variant = word[:-1] + 'ه'
+            expanded.add(variant)
+        elif word.endswith('ه'):
+            # Add ة variant: القضيه -> القضية
+            variant = word[:-1] + 'ة'
+            expanded.add(variant)
+    
+    _LOG.info("Expanded %d base exceptions to %d total exceptions (including ة/ه variants)", 
+              len(base_exceptions), len(expanded))
+    return expanded
+
+
 def load_exceptions() -> Set[str]:
     """Load exception words from JSON file.
     
@@ -66,7 +95,9 @@ def _get_exceptions() -> Set[str]:
             mtime = _EXC_FILE.stat().st_mtime
             # Reload if file changed OR if forced reload (mtime == 0)
             if mtime > _exceptions_mtime or _exceptions_mtime == 0.0:
-                _exceptions = load_exceptions()  # Use load_exceptions for testability
+                base_exceptions = load_exceptions()  # Use load_exceptions for testability
+                # Automatically add ة/ه variants for each exception word
+                _exceptions = _expand_taa_haa_variants(base_exceptions)
                 _exceptions_mtime = mtime or time()
                 apply_letter_rules.cache_clear()
         except Exception as e:
