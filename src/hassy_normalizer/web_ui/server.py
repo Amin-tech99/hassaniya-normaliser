@@ -9,6 +9,7 @@ import os
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import Dict, Any
 
 from flask import Flask, request, jsonify, render_template
@@ -16,7 +17,13 @@ from werkzeug.exceptions import BadRequest, InternalServerError
 
 from ..diff import word_diff_simple, format_diff_html, get_change_stats
 from ..normalizer import normalize_text, get_stats
+from ..data_loader import load_variants, load_link_fixes, clear_cache, _get_data_file_path
 from .. import __version__
+
+try:
+    import portalocker
+except ImportError:
+    portalocker = None
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +192,233 @@ def create_app() -> Flask:
             logger.error(f"Stats error: {e}", exc_info=True)
             return jsonify({"error": "Internal server error"}), 500
     
+    @app.route('/api/variant', methods=['POST'])
+    def api_add_variant():
+        """Add a new variant mapping.
+        
+        Expected JSON payload:
+        {
+            "canonical": "Canonical form",
+            "variant": "Variant form"
+        }
+        
+        Returns:
+        {
+            "success": true,
+            "message": "Variant added successfully"
+        }
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                raise BadRequest("Request must be JSON")
+            
+            data = request.get_json()
+            if not data:
+                raise BadRequest("Empty request body")
+            
+            canonical = data.get('canonical', '').strip()
+            variant = data.get('variant', '').strip()
+            
+            if not canonical or not variant:
+                raise BadRequest("Both 'canonical' and 'variant' fields are required")
+            
+            # Add variant to file
+            _add_variant_to_file(canonical, variant)
+            
+            # Clear caches to reload data
+            clear_cache()
+            
+            logger.info(f"Added variant: '{variant}' -> '{canonical}'")
+            return jsonify({
+                "success": True,
+                "message": "Variant added successfully"
+            })
+            
+        except BadRequest as e:
+            logger.warning(f"Bad request: {e.description}")
+            return jsonify({"error": e.description}), 400
+        except Exception as e:
+            logger.error(f"Error adding variant: {e}", exc_info=True)
+            return jsonify({"error": "Internal server error"}), 500
+    
+    @app.route('/api/variant', methods=['GET'])
+    def api_get_variants():
+        """Get variants for a canonical form or all recent variants.
+        
+        Query parameter:
+        - canonical: The canonical form to look up (optional)
+        
+        If canonical is provided, returns:
+        {
+            "canonical": "...",
+            "variants": ["...", "..."]
+        }
+        
+        If no canonical is provided, returns all recent variants:
+        {
+            "variants": [
+                {"canonical": "...", "variant": "..."},
+                ...
+            ]
+        }
+        """
+        try:
+            canonical = request.args.get('canonical', '').strip()
+            
+            # Load current variants
+            variants_data = _load_variants_file()
+            
+            if canonical:
+                # Return variants for specific canonical form
+                for entry in variants_data:
+                    if entry.get('canonical') == canonical:
+                        return jsonify({
+                            "canonical": canonical,
+                            "variants": entry.get('variants', [])
+                        })
+                
+                return jsonify({
+                    "canonical": canonical,
+                    "variants": []
+                })
+            else:
+                # Return all recent variants (flattened for display)
+                all_variants = []
+                for entry in variants_data:
+                    canonical_form = entry.get('canonical', '')
+                    for variant in entry.get('variants', []):
+                        all_variants.append({
+                            "canonical": canonical_form,
+                            "variant": variant
+                        })
+                
+                # Return last 10 entries
+                recent_variants = all_variants[-10:] if len(all_variants) > 10 else all_variants
+                
+                return jsonify({
+                    "variants": recent_variants
+                })
+            
+        except BadRequest as e:
+            logger.warning(f"Bad request: {e.description}")
+            return jsonify({"error": e.description}), 400
+        except Exception as e:
+            logger.error(f"Error getting variants: {e}", exc_info=True)
+            return jsonify({"error": "Internal server error"}), 500
+    
+    @app.route('/api/link-fix', methods=['POST'])
+    def api_add_link_fix():
+        """Add a new link fix mapping.
+        
+        Expected JSON payload:
+        {
+            "wrong": "Incorrect form",
+            "correct": "Correct form"
+        }
+        
+        Returns:
+        {
+            "success": true,
+            "message": "Link fix added successfully"
+        }
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                raise BadRequest("Request must be JSON")
+            
+            data = request.get_json()
+            if not data:
+                raise BadRequest("Empty request body")
+            
+            wrong = data.get('wrong', '').strip()
+            correct = data.get('correct', '').strip()
+            
+            if not wrong or not correct:
+                raise BadRequest("Both 'wrong' and 'correct' fields are required")
+            
+            # Add link fix to file
+            _add_link_fix_to_file(wrong, correct)
+            
+            # Clear caches to reload data
+            clear_cache()
+            
+            logger.info(f"Added link fix: '{wrong}' -> '{correct}'")
+            return jsonify({
+                "success": True,
+                "message": "Link fix added successfully"
+            })
+            
+        except BadRequest as e:
+            logger.warning(f"Bad request: {e.description}")
+            return jsonify({"error": e.description}), 400
+        except Exception as e:
+            logger.error(f"Error adding link fix: {e}", exc_info=True)
+            return jsonify({"error": "Internal server error"}), 500
+    
+    @app.route('/api/link-fix', methods=['GET'])
+    def api_get_link_fix():
+        """Get link fix for a wrong form or all recent link fixes.
+        
+        Query parameter:
+        - wrong: The wrong form to look up (optional)
+        
+        If wrong is provided, returns:
+        {
+            "wrong": "...",
+            "correct": "..."
+        }
+        
+        If no wrong is provided, returns all recent link fixes:
+        {
+            "link_fixes": [
+                {"wrong": "...", "correct": "..."},
+                ...
+            ]
+        }
+        """
+        try:
+            wrong = request.args.get('wrong', '').strip()
+            
+            if wrong:
+                # Return link fix for specific wrong form
+                link_fixes = load_link_fixes()
+                correct = link_fixes.get(wrong, '')
+                
+                return jsonify({
+                    "wrong": wrong,
+                    "correct": correct
+                })
+            else:
+                # Return all recent link fixes
+                # Resolve path to link-fixes data – may not exist yet.
+                try:
+                    filepath = _get_data_file_path("linked_words.json")
+                except FileNotFoundError:
+                    variant_path = _get_data_file_path("hassaniya_variants.jsonl")
+                    filepath = variant_path.parent / "linked_words.json"
+
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        link_fixes_data = json.load(f)
+                except FileNotFoundError:
+                    link_fixes_data = []
+                
+                # Return last 10 entries
+                recent_link_fixes = link_fixes_data[-10:] if len(link_fixes_data) > 10 else link_fixes_data
+                
+                return jsonify({
+                    "link_fixes": recent_link_fixes
+                })
+            
+        except BadRequest as e:
+            logger.warning(f"Bad request: {e.description}")
+            return jsonify({"error": e.description}), 400
+        except Exception as e:
+            logger.error(f"Error getting link fix: {e}", exc_info=True)
+            return jsonify({"error": "Internal server error"}), 500
+    
     @app.errorhandler(404)
     def not_found(error):
         """Handle 404 errors."""
@@ -222,6 +456,147 @@ def create_app() -> Flask:
         return response
     
     return app
+
+
+def _load_variants_file() -> list:
+    """Load variants file as list of entries.
+    
+    Returns:
+        List of variant entries
+    """
+    # Use the same path resolution as data_loader
+    filepath = _get_data_file_path("hassaniya_variants.jsonl")
+    
+    variants_data = []
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    variants_data.append(json.loads(line))
+    except FileNotFoundError:
+        logger.warning(f"Variants file not found: {filepath}")
+        pass  # File doesn't exist yet
+    
+    return variants_data
+
+
+def _add_variant_to_file(canonical: str, variant: str) -> None:
+    """Add a variant to the variants file.
+    
+    Args:
+        canonical: Canonical form
+        variant: Variant form
+    """
+    # Use the same path resolution as data_loader
+    filepath = _get_data_file_path("hassaniya_variants.jsonl")
+    
+    # Load existing data
+    variants_data = _load_variants_file()
+    
+    # Find existing entry or create new one and move it to the end of the list so the
+    # API can easily return the most recently modified canonical entry.
+    moved_entry = None
+    for idx, entry in enumerate(variants_data):
+        if entry.get('canonical') == canonical:
+            # Append the new variant if it's new for this canonical form
+            if variant not in entry.get('variants', []):
+                entry['variants'].append(variant)
+            # Remove the entry so that we can append it to the end and mark it as the
+            # most recently updated item.
+            moved_entry = variants_data.pop(idx)
+            break
+
+    if moved_entry is not None:
+        variants_data.append(moved_entry)
+    else:
+        # New canonical form – append a fresh entry to the end
+        variants_data.append({
+            "canonical": canonical,
+            "variants": [variant]
+        })
+    
+    # Write back to file with locking
+    _write_variants_file(filepath, variants_data)
+
+
+def _write_variants_file(filepath: Path, variants_data: list) -> None:
+    """Write variants data to file with locking.
+    
+    Args:
+        filepath: Path to variants file
+        variants_data: List of variant entries
+    """
+    # Ensure parent directory exists
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Write with file locking if available
+    with open(filepath, 'w', encoding='utf-8') as f:
+        if portalocker:
+            portalocker.lock(f, portalocker.LOCK_EX)
+        
+        for entry in variants_data:
+            json.dump(entry, f, ensure_ascii=False)
+            f.write('\n')
+        
+        if portalocker:
+            portalocker.unlock(f)
+
+
+def _add_link_fix_to_file(wrong: str, correct: str) -> None:
+    """Add a link fix to the link fixes file.
+    
+    Args:
+        wrong: Wrong form
+        correct: Correct form
+    """
+    # Resolve path to link-fixes data – may not exist yet on first run.
+    try:
+        filepath = _get_data_file_path("linked_words.json")
+    except FileNotFoundError:
+        variant_path = _get_data_file_path("hassaniya_variants.jsonl")
+        filepath = variant_path.parent / "linked_words.json"
+    
+    # Load existing data
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            link_fixes_data = json.load(f)
+    except FileNotFoundError:
+        link_fixes_data = []
+    
+    # Remove existing entry with same wrong form
+    link_fixes_data = [item for item in link_fixes_data if item.get('wrong') != wrong]
+    
+    # Add new entry
+    link_fixes_data.append({
+        "wrong": wrong,
+        "correct": correct
+    })
+    
+    # Write back to file with locking
+    _write_link_fixes_file(filepath, link_fixes_data)
+
+
+def _write_link_fixes_file(filepath: Path, link_fixes_data: list) -> None:
+    """Write link fixes data to file with locking.
+    
+    Args:
+        filepath: Path to link fixes file
+        link_fixes_data: List of link fix entries
+    """
+    # Ensure parent directory exists
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Write with file locking if available
+    with open(filepath, 'w', encoding='utf-8') as f:
+        if portalocker:
+            portalocker.lock(f, portalocker.LOCK_EX)
+        
+        json.dump(link_fixes_data, f, ensure_ascii=False, indent=2)
+        
+        if portalocker:
+            portalocker.unlock(f)
 
 
 def main() -> None:

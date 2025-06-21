@@ -31,17 +31,38 @@ def _get_data_file_path(filename: str) -> Path:
     Returns:
         Path to the data file
     """
+    # 1. Environment variable override
+    env_dir = os.getenv("HASSY_DATA_DIR")
+    if env_dir:
+        candidate = Path(env_dir) / filename
+        if candidate.exists():
+            return candidate
+
+    # 2. Walk up parent directories (max 5 levels) to locate a loose file (useful
+    #    during local development where the jsonl sits in the repo root)
+    current_dir = Path(__file__).resolve().parent
+    for _ in range(5):
+        candidate = current_dir / filename
+        if candidate.exists():
+            return candidate
+        current_dir = current_dir.parent
+
+    # 3. Try the packaged data folder (installed package scenario)
     try:
-        # Try to get from package data
         data_files = files("hassy_normalizer.data")
-        return data_files / filename
+        candidate = data_files / filename
+        if candidate.exists():
+            return candidate
     except (ImportError, FileNotFoundError):
-        # Fallback to relative path for development
-        current_dir = Path(__file__).parent
-        data_path = current_dir / "data" / filename
-        if data_path.exists():
-            return data_path
-        raise FileNotFoundError(f"Data file not found: {filename}")
+        pass
+
+    # 4. Fallback to src-relative "data" folder
+    data_path = Path(__file__).parent / "data" / filename
+    if data_path.exists():
+        return data_path
+
+    # Not found
+    raise FileNotFoundError(f"Data file not found: {filename}")
 
 
 def _validate_variant_entry(entry: Dict) -> None:
@@ -236,6 +257,88 @@ def load_exceptions() -> Set[str]:
     return _load_exceptions_cached(str(filepath), mtime)
 
 
+@lru_cache(maxsize=2)
+def _load_link_fixes_cached(filepath_str: str, mtime: float) -> Dict[str, str]:
+    """Cached loader for link fixes data.
+    
+    Args:
+        filepath_str: String path to link fixes file
+        mtime: File modification time (for cache invalidation)
+        
+    Returns:
+        Dictionary mapping wrong forms to correct forms
+    """
+    filepath = Path(filepath_str)
+    
+    logger.info(f"Loading link fixes from {filepath}")
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            link_fixes_list = json.load(f)
+            
+        if not isinstance(link_fixes_list, list):
+            raise ValueError(f"Link fixes must be a list, got {type(link_fixes_list)}")
+        
+        link_fixes_map = {}
+        for item in link_fixes_list:
+            if not isinstance(item, dict):
+                raise ValueError(f"Each link fix entry must be a dictionary, got {type(item)}")
+            if "wrong" not in item or "correct" not in item:
+                raise ValueError("Each link fix entry must have 'wrong' and 'correct' fields")
+            if not isinstance(item["wrong"], str) or not isinstance(item["correct"], str):
+                raise ValueError("'wrong' and 'correct' fields must be strings")
+            
+            link_fixes_map[item["wrong"]] = item["correct"]
+            
+    except FileNotFoundError:
+        logger.info(f"Link fixes file not found: {filepath}, using empty mapping")
+        return {}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {filepath}: {e}")
+    except UnicodeDecodeError as e:
+        raise ValueError(f"Encoding error reading {filepath}: {e}")
+    
+    logger.info(f"Loaded {len(link_fixes_map)} link fix mappings")
+    return link_fixes_map
+
+
+def load_link_fixes() -> Dict[str, str]:
+    """Load link fix mappings from JSON file.
+    
+    Returns:
+        Dictionary mapping wrong forms to correct forms
+        
+    Raises:
+        ValueError: If file format is invalid
+    """
+    filepath = _get_data_file_path("linked_words.json")
+    
+    # Check if file changed and clear cache if needed
+    if _check_file_changed(filepath):
+        _load_link_fixes_cached.cache_clear()
+    
+    try:
+        mtime = os.path.getmtime(filepath)
+    except OSError:
+        # File doesn't exist, return empty dict
+        return {}
+    
+    return _load_link_fixes_cached(str(filepath), mtime)
+
+
+def get_link_fixes() -> Dict[str, str]:
+    """Get link fixes mapping with error handling.
+    
+    Returns:
+        Dictionary mapping wrong forms to correct forms
+    """
+    try:
+        return load_link_fixes()
+    except Exception as e:
+        logger.error(f"Failed to load link fixes: {e}")
+        return {}  # Fallback to empty mapping
+
+
 def clear_cache() -> None:
     """Clear all data loading caches.
     
@@ -243,5 +346,6 @@ def clear_cache() -> None:
     """
     _load_variants_cached.cache_clear()
     _load_exceptions_cached.cache_clear()
+    _load_link_fixes_cached.cache_clear()
     _file_mtimes.clear()
     logger.info("Data loading caches cleared")

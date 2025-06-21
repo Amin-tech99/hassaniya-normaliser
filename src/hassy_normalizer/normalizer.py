@@ -9,7 +9,7 @@ import re
 import threading
 from typing import Dict, Iterator, Set
 
-from .data_loader import load_variants
+from .data_loader import load_variants, get_link_fixes
 from .rules import normalize_word_with_rules
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,9 @@ def normalize_word(word: str) -> str:
     """Normalize a single word using the full pipeline.
     
     Pipeline order:
-    1. Variant lookup - check if word has a known canonical form
-    2. Letter rules - apply گ/ق→ك and ة→ه transformations
+    1. Link fixes - check if word needs to be linked/unlinked
+    2. Variant lookup - check if word has a known canonical form
+    3. Letter rules - apply گ/ق→ك and ة→ه transformations
     
     Args:
         word: Input word to normalize
@@ -63,14 +64,21 @@ def normalize_word(word: str) -> str:
     
     original_word = word.strip()
     
-    # Step 1: Variant lookup
+    # Step 1: Link fixes
+    link_fixes = get_link_fixes()
+    if original_word in link_fixes:
+        fixed_word = link_fixes[original_word]
+        logger.debug(f"Link fix: '{original_word}' -> '{fixed_word}'")
+        return fixed_word
+    
+    # Step 2: Variant lookup
     variants_map = _get_variants_map()
     if original_word in variants_map:
         canonical = variants_map[original_word]
         logger.debug(f"Variant lookup: '{original_word}' -> '{canonical}'")
         return canonical
     
-    # Step 2: Apply letter rules
+    # Step 3: Apply letter rules
     normalized = normalize_word_with_rules(original_word)
     
     # Track if this was an unknown variant (not in our mapping)

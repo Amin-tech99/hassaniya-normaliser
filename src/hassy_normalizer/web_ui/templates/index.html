@@ -29,9 +29,37 @@
         
         <!-- Main Content -->
         <main class="row">
-            <div class="col-lg-8 mx-auto">
+            <div class="col-lg-10 mx-auto">
                 
-                <!-- Input Section -->
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="normalize-tab" data-bs-toggle="tab" data-bs-target="#normalize-pane" type="button" role="tab">
+                            <i class="bi bi-translate me-2"></i>
+                            Normalize
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="variants-tab" data-bs-toggle="tab" data-bs-target="#variants-pane" type="button" role="tab">
+                            <i class="bi bi-list-ul me-2"></i>
+                            Variants
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="linkfix-tab" data-bs-toggle="tab" data-bs-target="#linkfix-pane" type="button" role="tab">
+                            <i class="bi bi-link-45deg me-2"></i>
+                            Link-Fix
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="mainTabContent">
+                    
+                    <!-- Normalize Tab -->
+                    <div class="tab-pane fade show active" id="normalize-pane" role="tabpanel">
+                        
+                        <!-- Input Section -->
                 <div class="card mb-4">
                     <div class="card-header">
                         <h5 class="card-title mb-0">
@@ -148,14 +176,149 @@
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Loading Spinner -->
-                <div id="loadingSpinner" class="text-center py-4" style="display: none;">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Processing...</span>
+                        </div>
+                        
+                        <!-- Loading Spinner -->
+                        <div id="loadingSpinner" class="text-center py-4" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Processing...</span>
+                            </div>
+                            <div class="mt-2">Normalizing text...</div>
+                        </div>
+                        
                     </div>
-                    <div class="mt-2">Normalizing text...</div>
+                    
+                    <!-- Variants Tab -->
+                    <div class="tab-pane fade" id="variants-pane" role="tabpanel">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <!-- Add Variant Form -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">
+                                            <i class="bi bi-plus-circle me-2"></i>
+                                            Add New Variant
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="variantForm">
+                                            <div class="mb-3">
+                                                <label for="canonicalInput" class="form-label">Canonical Form</label>
+                                                <input type="text" class="form-control arabic-text" id="canonicalInput" dir="rtl" placeholder="Enter canonical form...">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="variantInput" class="form-label">Variant Forms</label>
+                                                <textarea class="form-control arabic-text" id="variantInput" dir="rtl" rows="3" placeholder="Enter variant forms (one per line)..."></textarea>
+                                                <div class="form-text">Enter multiple variants, one per line. Example:<br>قال<br>ڨال<br>گال</div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary" id="addVariantBtn">
+                                                <i class="bi bi-plus-circle me-2"></i>
+                                                Add Variants
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <!-- Variants List -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">
+                                            <i class="bi bi-list-ul me-2"></i>
+                                            Recent Variants
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Canonical</th>
+                                                        <th>Variant</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="variantTableBody">
+                                                    <tr>
+                                                        <td colspan="2" class="text-muted text-center">No variants added yet</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                    <!-- Link-Fix Tab -->
+                    <div class="tab-pane fade" id="linkfix-pane" role="tabpanel">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <!-- Add Link Fix Form -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">
+                                            <i class="bi bi-plus-circle me-2"></i>
+                                            Add New Link Fix
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="linkFixForm">
+                                            <div class="mb-3">
+                                                <label for="wrongInput" class="form-label">Incorrect / Split Form</label>
+                                                <input type="text" class="form-control arabic-text" id="wrongInput" dir="rtl" placeholder="Enter incorrect form...">
+                                                <div class="form-text">Example: ما في</div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="correctInput" class="form-label">Correct / Linked Form</label>
+                                                <input type="text" class="form-control arabic-text" id="correctInput" dir="rtl" placeholder="Enter correct form...">
+                                                <div class="form-text">Example: مافي</div>
+                                            </div>
+                                            <button type="submit" id="addLinkFixBtn" class="btn btn-primary">
+                                                <i class="bi bi-plus-circle me-2"></i>
+                                                Add Link Fix
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <!-- Link Fixes List -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">
+                                            <i class="bi bi-link-45deg me-2"></i>
+                                            Recent Link Fixes
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Incorrect</th>
+                                                        <th>Correct</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="linkFixTableBody">
+                                                    <tr>
+                                                        <td colspan="2" class="text-muted text-center">No link fixes added yet</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
                 </div>
                 
             </div>
@@ -188,6 +351,17 @@
             </div>
             <div class="toast-body" id="errorMessage">
                 An error occurred
+            </div>
+        </div>
+        
+        <div id="successToast" class="toast" role="alert">
+            <div class="toast-header bg-success text-white">
+                <i class="bi bi-check-circle me-2"></i>
+                <strong class="me-auto">Success</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="successMessage">
+                Operation completed successfully
             </div>
         </div>
     </div>
