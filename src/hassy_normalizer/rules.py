@@ -45,7 +45,26 @@ def _load_exception_words() -> Set[str]:
     if not isinstance(data, list) or not all(isinstance(x, str) for x in data):
         raise ValueError("exception_words_g_q.json must be a JSON array of strings")
     _LOG.info("Loaded %d exception words", len(data))
-    return set(data)
+    words = set(data)
+
+    # Automatically add taa/haa variants. If a word ends with "ه" and the same
+    # stem with a final "ة" is missing, add it. Likewise add the "ه" form when
+    # only the "ة" form exists.
+    expanded = set(words)
+    for w in words:
+        if w.endswith("ه"):
+            expanded.add(w[:-1] + "ة")
+        elif w.endswith("ة"):
+            expanded.add(w[:-1] + "ه")
+
+    if len(expanded) != len(words):
+        _LOG.info(
+            "Expanded exceptions with taa/haa variants: %d -> %d",
+            len(words),
+            len(expanded),
+        )
+
+    return expanded
 
 
 def load_exceptions() -> Set[str]:
