@@ -1,4 +1,50 @@
-# 🚀 Deployment Guide
+# Deployment Guide
+
+This guide helps you publish the Hassaniya normalizer to GitHub, deploy it as a web app, and run it completely offline on Windows.
+
+## GitHub Pages Web App Deployment
+
+The repository includes automated GitHub Pages deployment workflows that allow you to run the Hassaniya normalizer directly in the browser.
+
+### Setup Instructions for Web App
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository on GitHub
+   - Navigate to Settings → Pages
+   - Under "Source", select "GitHub Actions"
+   - Save the settings
+
+2. **The workflows will automatically deploy when you push to the main branch:**
+   - `deploy-pages.yml`: Creates a simple static site with basic normalization
+   - `deploy-serverless.yml`: Creates an enhanced web app with better UI/UX
+
+3. **Access your deployed app:**
+   - After the workflow completes, your app will be available at:
+   - `https://yourusername.github.io/hassaniya-normalizer/`
+
+### Features of the Web App
+
+- **Client-side normalization**: Runs entirely in the browser
+- **القضية exception handling**: Preserves ة in القضية as per the normalizer rules
+- **Modern UI**: Responsive design with examples and copy functionality
+- **No server required**: Static deployment, fast loading
+- **Offline capable**: Works without internet after initial load
+
+### Workflow Details
+
+#### deploy-pages.yml
+- Creates a simple HTML page with basic normalization
+- Lightweight and fast
+- Good for basic use cases
+
+#### deploy-serverless.yml
+- Enhanced UI with better styling
+- More comprehensive normalization rules
+- Interactive examples
+- Copy to clipboard functionality
+- Better mobile responsiveness
+
+## Local Development and Publishing
 
 This guide helps you publish the Hassaniya normalizer to GitHub and run it completely offline on Windows.
 

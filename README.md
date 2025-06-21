@@ -75,6 +75,34 @@ print(html_diff)
 
 ## Installation
 
+### For End Users
+
+```bash
+pip install hassy-normalizer
+```
+
+### For Developers (After Git Clone)
+
+If you've cloned this repository:
+
+```bash
+# Navigate to project directory
+cd hassaniya-normalizer
+
+# Install in development mode with web dependencies
+pip install -e .[web]
+
+# OR install with all dependencies for development
+pip install -e .[dev,web]
+
+# Start the web UI
+hassy-web
+# OR
+.\run-ui.ps1  # Windows
+```
+
+**⚠️ Important**: After cloning, you MUST run `pip install -e .[web]` to install dependencies and make the commands available.
+
 ### Requirements
 
 - Python 3.9 or higher
