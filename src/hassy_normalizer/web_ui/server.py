@@ -131,8 +131,8 @@ def create_app() -> Flask:
                 raise BadRequest("'text' field must be a string")
             
             # Limit text length
-            if len(original_text) > 10000:  # 10k characters max
-                raise BadRequest("Text too long (max 10,000 characters)")
+            if len(original_text) > 100000:  # 100k characters max
+                raise BadRequest("Text too long (max 100,000 characters)")
             
             # Normalize text
             normalized_text = normalize_text(original_text)

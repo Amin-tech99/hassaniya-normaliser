@@ -151,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known Limitations
 
-- Text length limit of 10,000 characters in web API
+- Text length limit of 100,000 characters in web API
 - Single-threaded Flask development server
 - In-memory caching (no persistence between restarts)
 - Basic authentication not yet implemented

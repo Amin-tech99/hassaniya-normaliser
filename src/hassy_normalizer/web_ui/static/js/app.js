@@ -112,8 +112,8 @@ class HassaniyaNormalizer {
             return;
         }
 
-        if (text.length > 10000) {
-            this.showError('Text is too long. Maximum 10,000 characters allowed.');
+        if (text.length > 100000) {
+            this.showError('Text is too long. Maximum 100,000 characters allowed.');
             return;
         }
 
