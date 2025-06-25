@@ -22,8 +22,50 @@ logger = logging.getLogger(__name__)
 _file_mtimes: Dict[str, float] = {}
 
 
+def _get_writable_data_path(filename: str) -> Path:
+    """Get writable path for data files, prioritizing writable locations.
+    
+    Args:
+        filename: Name of the data file
+        
+    Returns:
+        Path where the data file can be written
+    """
+    # 1. Environment variable override (highest priority)
+    env_dir = os.getenv("HASSY_DATA_DIR")
+    if env_dir:
+        data_dir = Path(env_dir)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / filename
+
+    # 2. Production environment - use /tmp for writable storage
+    if os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("HEROKU"):
+        data_dir = Path("/tmp/hassy_data")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / filename
+
+    # 3. Docker environment
+    if Path("/app").exists():
+        data_dir = Path("/app/data")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / filename
+
+    # 4. Local development - walk up to find project root
+    current_dir = Path(__file__).resolve().parent
+    for _ in range(5):
+        candidate = current_dir / filename
+        if candidate.exists():
+            return candidate
+        current_dir = current_dir.parent
+
+    # 5. Fallback to src-relative "data" folder
+    data_dir = Path(__file__).parent / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / filename
+
+
 def _get_data_file_path(filename: str) -> Path:
-    """Get path to data file using importlib.resources.
+    """Get path to data file for reading, with fallback to writable path.
     
     Args:
         filename: Name of the data file
@@ -38,7 +80,13 @@ def _get_data_file_path(filename: str) -> Path:
         if candidate.exists():
             return candidate
 
-    # 2. Walk up parent directories (max 5 levels) to locate a loose file (useful
+    # 2. Production environment - check /tmp first
+    if os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("HEROKU"):
+        tmp_candidate = Path("/tmp/hassy_data") / filename
+        if tmp_candidate.exists():
+            return tmp_candidate
+
+    # 3. Walk up parent directories (max 5 levels) to locate a loose file (useful
     #    during local development where the jsonl sits in the repo root)
     current_dir = Path(__file__).resolve().parent
     for _ in range(5):
@@ -47,7 +95,7 @@ def _get_data_file_path(filename: str) -> Path:
             return candidate
         current_dir = current_dir.parent
 
-    # 3. Try the packaged data folder (installed package scenario)
+    # 4. Try the packaged data folder (installed package scenario)
     try:
         data_files = files("hassy_normalizer.data")
         candidate = data_files / filename
@@ -56,18 +104,18 @@ def _get_data_file_path(filename: str) -> Path:
     except (ImportError, FileNotFoundError):
         pass
 
-    # 4. Docker fallback - explicit data directory
+    # 5. Docker fallback - explicit data directory
     docker_data_path = Path("/app/data") / filename
     if docker_data_path.exists():
         return docker_data_path
 
-    # 5. Fallback to src-relative "data" folder
+    # 6. Fallback to src-relative "data" folder
     data_path = Path(__file__).parent / "data" / filename
     if data_path.exists():
         return data_path
 
-    # Not found
-    raise FileNotFoundError(f"Data file not found: {filename}")
+    # 7. If file doesn't exist anywhere, return writable path
+    return _get_writable_data_path(filename)
 
 
 def _validate_variant_entry(entry: Dict) -> None:

@@ -25,7 +25,7 @@ from hassy_normalizer import (
     format_diff_html,
     get_change_stats,
 )
-from hassy_normalizer.data_loader import _get_data_file_path, clear_cache
+from hassy_normalizer.data_loader import _get_data_file_path, _get_writable_data_path, clear_cache
 
 # Log the normalizer version at startup
 import importlib.metadata
@@ -131,12 +131,14 @@ class SimpleStorage:
     
     def add_linked_word(self, wrong: str, correct: str, reporter: str):
         """Add a linked word pair and update the JSON file in real-time"""
-        linked_words_file = _get_data_file_path("linked_words.json")
+        # Read from existing location first
+        read_file = _get_data_file_path("linked_words.json")
+        write_file = _get_writable_data_path("linked_words.json")
         
         # Load existing data
         try:
-            if linked_words_file.exists():
-                with open(linked_words_file, 'r', encoding='utf-8') as f:
+            if read_file.exists():
+                with open(read_file, 'r', encoding='utf-8') as f:
                     linked_words = json.load(f)
             else:
                 linked_words = []
@@ -158,10 +160,10 @@ class SimpleStorage:
         if not exists:
             linked_words.append(new_entry)
             
-            # Save to file
+            # Save to writable file
             try:
-                 linked_words_file.parent.mkdir(parents=True, exist_ok=True)
-                 with open(linked_words_file, 'w', encoding='utf-8') as f:
+                 write_file.parent.mkdir(parents=True, exist_ok=True)
+                 with open(write_file, 'w', encoding='utf-8') as f:
                      json.dump(linked_words, f, ensure_ascii=False, indent=2)
                  # Clear cache so normalizer uses updated data
                  clear_cache()
@@ -173,13 +175,15 @@ class SimpleStorage:
     
     def add_variant_word(self, canonical: str, variant: str, reporter: str):
         """Add a variant word and update the JSONL file in real-time"""
-        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
+        # Read from existing location first
+        read_file = _get_data_file_path("hassaniya_variants.jsonl")
+        write_file = _get_writable_data_path("hassaniya_variants.jsonl")
         
         # Load existing data
         variants_data = {}
         try:
-            if variants_file.exists():
-                with open(variants_file, 'r', encoding='utf-8') as f:
+            if read_file.exists():
+                with open(read_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
                             entry = json.loads(line)
@@ -196,10 +200,10 @@ class SimpleStorage:
         else:
             variants_data[canonical] = [variant]
         
-        # Save to file
+        # Save to writable file
         try:
-            variants_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(variants_file, 'w', encoding='utf-8') as f:
+            write_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(write_file, 'w', encoding='utf-8') as f:
                 for canonical_word, variant_list in variants_data.items():
                     entry = {
                         "canonical": canonical_word,
@@ -240,19 +244,22 @@ class SimpleStorage:
     
     def delete_linked_word(self, wrong: str, correct: str):
         """Delete a linked word pair from the JSON file"""
-        linked_words_file = _get_data_file_path("linked_words.json")
+        # Read from existing location first
+        read_file = _get_data_file_path("linked_words.json")
+        write_file = _get_writable_data_path("linked_words.json")
         
         try:
-            if linked_words_file.exists():
-                with open(linked_words_file, 'r', encoding='utf-8') as f:
+            if read_file.exists():
+                with open(read_file, 'r', encoding='utf-8') as f:
                     linked_words = json.load(f)
                 
                 # Remove the entry
                 linked_words = [item for item in linked_words 
                               if not (item.get("wrong") == wrong and item.get("correct") == correct)]
                 
-                # Save back to file
-                with open(linked_words_file, 'w', encoding='utf-8') as f:
+                # Save back to writable file
+                write_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(write_file, 'w', encoding='utf-8') as f:
                     json.dump(linked_words, f, ensure_ascii=False, indent=2)
                 
                 return True
@@ -263,12 +270,14 @@ class SimpleStorage:
     
     def delete_variant_word(self, canonical: str, variant: str = None):
         """Delete a variant word or entire canonical entry from the JSONL file"""
-        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
+        # Read from existing location first
+        read_file = _get_data_file_path("hassaniya_variants.jsonl")
+        write_file = _get_writable_data_path("hassaniya_variants.jsonl")
         
         try:
-            if variants_file.exists():
+            if read_file.exists():
                 variants_data = {}
-                with open(variants_file, 'r', encoding='utf-8') as f:
+                with open(read_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
                             entry = json.loads(line)
@@ -286,8 +295,9 @@ class SimpleStorage:
                         # Remove entire canonical entry
                         del variants_data[canonical]
                 
-                # Save back to file
-                with open(variants_file, 'w', encoding='utf-8') as f:
+                # Save back to writable file
+                write_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(write_file, 'w', encoding='utf-8') as f:
                     for canonical_word, variant_list in variants_data.items():
                         entry = {
                             "canonical": canonical_word,
