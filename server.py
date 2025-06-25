@@ -25,7 +25,7 @@ from hassy_normalizer import (
     format_diff_html,
     get_change_stats,
 )
-from hassy_normalizer.data_loader import _get_data_file_path
+from hassy_normalizer.data_loader import _get_data_file_path, clear_cache
 
 # Log the normalizer version at startup
 import importlib.metadata
@@ -160,10 +160,12 @@ class SimpleStorage:
             
             # Save to file
             try:
-                linked_words_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(linked_words_file, 'w', encoding='utf-8') as f:
-                    json.dump(linked_words, f, ensure_ascii=False, indent=2)
-                return len(linked_words)
+                 linked_words_file.parent.mkdir(parents=True, exist_ok=True)
+                 with open(linked_words_file, 'w', encoding='utf-8') as f:
+                     json.dump(linked_words, f, ensure_ascii=False, indent=2)
+                 # Clear cache so normalizer uses updated data
+                 clear_cache()
+                 return len(linked_words)
             except Exception as e:
                 print(f"Error saving linked words: {e}")
                 return None
@@ -204,6 +206,8 @@ class SimpleStorage:
                         "variants": variant_list
                     }
                     f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+            # Clear cache so normalizer uses updated data
+            clear_cache()
             return len(variants_data)
         except Exception as e:
             print(f"Error saving variant words: {e}")
