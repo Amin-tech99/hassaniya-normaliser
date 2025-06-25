@@ -1,4 +1,6 @@
-"""Unified server with login and improved user statistics."""
+"""Unified server with login and improved user statistics.
+Updated: Force deployment refresh to ensure debug endpoint is available.
+"""
 
 import hashlib
 import os
