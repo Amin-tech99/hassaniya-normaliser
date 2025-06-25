@@ -56,7 +56,12 @@ def _get_data_file_path(filename: str) -> Path:
     except (ImportError, FileNotFoundError):
         pass
 
-    # 4. Fallback to src-relative "data" folder
+    # 4. Docker fallback - explicit data directory
+    docker_data_path = Path("/app/data") / filename
+    if docker_data_path.exists():
+        return docker_data_path
+
+    # 5. Fallback to src-relative "data" folder
     data_path = Path(__file__).parent / "data" / filename
     if data_path.exists():
         return data_path

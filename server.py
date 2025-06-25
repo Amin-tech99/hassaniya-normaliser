@@ -2299,8 +2299,56 @@ async def skip_paragraph(para_id: int, username: str):
 
 @app.get("/api/stats")
 async def get_stats():
-    """Get system statistics."""
+    """Get application statistics."""
     return storage.get_stats()
+
+@app.get("/api/debug/data-files")
+async def debug_data_files():
+    """Debug endpoint to check data file accessibility."""
+    try:
+        from src.hassy_normalizer.data_loader import _get_data_file_path
+        from pathlib import Path
+        import os
+        
+        debug_info = {
+            "data_files_status": {},
+            "environment": {
+                "cwd": str(Path.cwd()),
+                "__file__": __file__ if '__file__' in globals() else "Not available",
+                "HASSY_DATA_DIR": os.getenv("HASSY_DATA_DIR", "Not set")
+            },
+            "normalizer_stats": get_normalizer_stats()
+        }
+        
+        # Check each data file
+        data_files = [
+            "hassaniya_variants.jsonl",
+            "exception_words_g_q.json",
+            "linked_words.json"
+        ]
+        
+        for filename in data_files:
+            try:
+                filepath = _get_data_file_path(filename)
+                debug_info["data_files_status"][filename] = {
+                    "found": True,
+                    "path": str(filepath),
+                    "exists": filepath.exists(),
+                    "size": filepath.stat().st_size if filepath.exists() else 0
+                }
+            except Exception as e:
+                debug_info["data_files_status"][filename] = {
+                    "found": False,
+                    "error": str(e)
+                }
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": f"Debug endpoint failed: {str(e)}",
+            "normalizer_stats": get_normalizer_stats()
+        }
 
 @app.post("/api/variants")
 async def add_variant(report: VariantReport):

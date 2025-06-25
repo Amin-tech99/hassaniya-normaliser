@@ -56,6 +56,8 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin/hassy-* /usr/local/bin/
 COPY --from=builder /app/server.py /app/
+# Explicitly copy data files as fallback
+COPY --from=builder /app/src/hassy_normalizer/data /app/data
 
 # Create directories and set permissions
 RUN mkdir -p /app/logs && \
