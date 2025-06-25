@@ -53,11 +53,9 @@ Repository = "https://github.com/example/hassaniya-normalizer"
 Issues = "https://github.com/example/hassaniya-normalizer/issues"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 packages = ["hassy_normalizer"]          # explicit list is safest
 include-package-data = true              # ← KEY FLAG
-
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [tool.setuptools.package-data]
 "hassy_normalizer" = ["data/*.json", "data/*.jsonl"]
