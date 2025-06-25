@@ -2,17 +2,40 @@
 
 import os
 import sys
+import importlib.util
 from pathlib import Path
-
-# Add the project root to the Python path
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 def main():
     """Main entry point for the web server."""
     try:
-        # Import the FastAPI app from the root server.py
-        from server import app
+        # Try multiple paths to find server.py
+        possible_paths = [
+            # Current working directory
+            Path.cwd() / "server.py",
+            # Project root (4 levels up from this file)
+            Path(__file__).parent.parent.parent.parent / "server.py",
+            # App directory in Docker
+            Path("/app/server.py"),
+            # Relative to package installation
+            Path(__file__).parent.parent.parent.parent.parent / "server.py"
+        ]
+        
+        server_module = None
+        for server_path in possible_paths:
+            if server_path.exists():
+                print(f"Found server.py at: {server_path}")
+                # Load the module dynamically
+                spec = importlib.util.spec_from_file_location("server", server_path)
+                server_module = importlib.util.module_from_spec(spec)
+                sys.modules["server"] = server_module
+                spec.loader.exec_module(server_module)
+                break
+        
+        if server_module is None:
+            raise ImportError("Could not find server.py in any expected location")
+        
+        # Get the FastAPI app
+        app = server_module.app
         import uvicorn
         
         # Get port from environment or default to 8002
@@ -24,7 +47,9 @@ def main():
         
     except ImportError as e:
         print(f"Error importing server: {e}")
-        print("Make sure you're running from the project root directory.")
+        print("Searched paths:")
+        for path in possible_paths:
+            print(f"  - {path} (exists: {path.exists()})")
         sys.exit(1)
     except Exception as e:
         print(f"Error starting server: {e}")

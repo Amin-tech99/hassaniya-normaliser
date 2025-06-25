@@ -27,6 +27,7 @@ WORKDIR /app
 # Copy project files
 COPY pyproject.toml .
 COPY src/ src/
+COPY server.py .
 COPY README.md .
 COPY LICENSE .
 
@@ -54,6 +55,7 @@ WORKDIR /app
 # Copy installed package from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin/hassy-* /usr/local/bin/
+COPY --from=builder /app/server.py /app/
 
 # Create directories and set permissions
 RUN mkdir -p /app/logs && \
