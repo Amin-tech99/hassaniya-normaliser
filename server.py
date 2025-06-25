@@ -25,6 +25,7 @@ from hassy_normalizer import (
     format_diff_html,
     get_change_stats,
 )
+from hassy_normalizer.data_loader import _get_data_file_path
 
 # Log the normalizer version at startup
 import importlib.metadata
@@ -130,7 +131,7 @@ class SimpleStorage:
     
     def add_linked_word(self, wrong: str, correct: str, reporter: str):
         """Add a linked word pair and update the JSON file in real-time"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
+        linked_words_file = _get_data_file_path("linked_words.json")
         
         # Load existing data
         try:
@@ -170,7 +171,7 @@ class SimpleStorage:
     
     def add_variant_word(self, canonical: str, variant: str, reporter: str):
         """Add a variant word and update the JSONL file in real-time"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
         
         # Load existing data
         variants_data = {}
@@ -210,7 +211,7 @@ class SimpleStorage:
     
     def get_linked_words(self):
         """Get all linked words from the JSON file"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
+        linked_words_file = _get_data_file_path("linked_words.json")
         try:
             if linked_words_file.exists():
                 with open(linked_words_file, 'r', encoding='utf-8') as f:
@@ -221,7 +222,7 @@ class SimpleStorage:
     
     def get_variant_words(self):
         """Get all variant words from the JSONL file"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
         variants = []
         try:
             if variants_file.exists():
@@ -235,7 +236,7 @@ class SimpleStorage:
     
     def delete_linked_word(self, wrong: str, correct: str):
         """Delete a linked word pair from the JSON file"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
+        linked_words_file = _get_data_file_path("linked_words.json")
         
         try:
             if linked_words_file.exists():
@@ -258,7 +259,7 @@ class SimpleStorage:
     
     def delete_variant_word(self, canonical: str, variant: str = None):
         """Delete a variant word or entire canonical entry from the JSONL file"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
         
         try:
             if variants_file.exists():
