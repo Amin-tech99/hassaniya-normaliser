@@ -18,25 +18,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Import normalizer functionality
+from hassy_normalizer import (
+    normalize_text,
+    get_normalizer_stats,
+    word_diff_simple,
+    format_diff_html,
+    get_change_stats,
+)
+
+# Log the normalizer version at startup
+import importlib.metadata
 try:
-    from src.hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
-    from src.hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
-except ImportError:
-    # Fallback functions if normalizer is not available
-    def normalize_text(text: str) -> str:
-        return text.replace('ڤ', 'ف').replace('ڨ', 'ق')
-    
-    def get_normalizer_stats() -> Dict[str, int]:
-        return {"variants_loaded": 0, "exceptions_loaded": 0, "unknown_variants": 0}
-    
-    def word_diff_simple(text: str) -> List:
-        return []
-    
-    def format_diff_html(diff_entries: List) -> str:
-        return "Diff functionality not available"
-    
-    def get_change_stats(diff_entries: List) -> Dict[str, Any]:
-        return {"total_words": 0, "changed_words": 0, "change_percentage": 0.0}
+    version = importlib.metadata.version("hassy-normalizer")
+    print(f"Hassy-Normalizer v{version}")
+except Exception as e:
+    print(f"Could not get normalizer version: {e}")
 
 # Simple in-memory storage
 class SimpleStorage:
