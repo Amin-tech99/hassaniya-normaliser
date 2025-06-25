@@ -445,6 +445,11 @@ def authenticate_user(username: str) -> bool:
     """Check if user is valid."""
     return username in USERS
 
+@app.get("/healthz")
+async def health_check():
+    """Health check endpoint for Docker and deployment platforms."""
+    return {"status": "healthy", "service": "hassaniya-normalizer"}
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_login_page():
     """Serve the login page."""
