@@ -8,10 +8,6 @@ import time
 import json
 import zipfile
 import io
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -23,14 +19,15 @@ from pydantic import BaseModel
 
 # Import normalizer functionality
 try:
-    from hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
-    from hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
+    from src.hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
+    from src.hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
 except ImportError:
     # Fallback functions if normalizer is not available
     def normalize_text(text: str) -> str:
         return text.replace('ڤ', 'ف').replace('ڨ', 'ق')
     
-    # get_normalizer_stats is now imported from hassy_normalizer.normalizer
+    def get_normalizer_stats() -> Dict[str, int]:
+        return {"variants_loaded": 0, "exceptions_loaded": 0, "unknown_variants": 0}
     
     def word_diff_simple(text: str) -> List:
         return []
@@ -57,7 +54,6 @@ class SimpleStorage:
                 "text_final": None,
                 "status": "unassigned",
                 "assigned_to": None,
-                "uploaded_by": "SYSTEM",
                 "created_at": datetime.now(timezone.utc).isoformat()
             },
             {
@@ -66,20 +62,18 @@ class SimpleStorage:
                 "text_final": None,
                 "status": "unassigned",
                 "assigned_to": None,
-                "uploaded_by": "SYSTEM",
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
         ]
         self.next_id = 3
     
-    def add_paragraph(self, text: str, uploaded_by: str = "SYSTEM") -> int:
+    def add_paragraph(self, text: str) -> int:
         paragraph = {
             "id": self.next_id,
             "text_original": text,
             "text_final": None,
             "status": "unassigned",
             "assigned_to": None,
-            "uploaded_by": uploaded_by,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         self.paragraphs.append(paragraph)
@@ -88,10 +82,7 @@ class SimpleStorage:
     
     def get_next_unassigned(self, username: str) -> Optional[Dict]:
         for paragraph in self.paragraphs:
-            if (paragraph["status"] == "unassigned" and 
-                (paragraph["uploaded_by"] == username or 
-                 paragraph["uploaded_by"] == "SYSTEM" or 
-                 username in ADMINS)):
+            if paragraph["status"] == "unassigned":
                 paragraph["status"] = "assigned"
                 paragraph["assigned_to"] = username
                 return paragraph
@@ -362,13 +353,6 @@ class SimpleStorage:
             "all_users": USERS
         }
     
-    def get_user(self, username: str) -> Dict[str, Any]:
-        """Get user details including admin status."""
-        return {
-            "username": username,
-            "is_admin": username in ADMINS
-        }
-    
     def get_stats(self) -> Dict[str, Any]:
         total = len(self.paragraphs)
         assigned = len([p for p in self.paragraphs if p["status"] == "assigned"])
@@ -443,7 +427,7 @@ DATA_DIR.mkdir(exist_ok=True)
 AUDIO_DIR.mkdir(exist_ok=True)
 
 # Users that can login and their roles
-ADMINS = ["EMIN", "ETHMAN", "ZAIN", "MOUHAMEDOU", "SUPERADMIN"]
+ADMINS = ["EMIN", "ETHMAN", "ZAIN", "MOUHAMEDOU"]
 USERS = ADMINS.copy()  # Start with admins as users
 
 # Emotion emojis for audio labeling
@@ -486,10 +470,6 @@ class VariantWordReport(BaseModel):
 class UserManagement(BaseModel):
     username: str
     admin_username: str
-
-class UserDetails(BaseModel):
-    username: str
-    is_admin: bool
 
 class EmotionSubmission(BaseModel):
     emotion: str
@@ -642,44 +622,18 @@ async def serve_login_page():
         <div class="users-list">
             <h3>Authorized Users:</h3>
             <div class="user-pills">
-                <!-- User pills will be dynamically loaded here -->
+                <span class="user-pill" onclick="selectUser('EMIN')">EMIN</span>
+                <span class="user-pill" onclick="selectUser('ETHMAN')">ETHMAN</span>
+                <span class="user-pill" onclick="selectUser('ZAIN')">ZAIN</span>
+                <span class="user-pill" onclick="selectUser('MOUHAMEDOU')">MOUHAMEDOU</span>
             </div>
         </div>
     </div>
     
     <script>
-        let userData = null;
-         
-         // Load user data on page load
-         window.onload = async function() {
-             try {
-                 const response = await fetch('/api/users');
-                 userData = await response.json();
-                 
-                 // Update user pills
-                 const userPillsContainer = document.querySelector('.user-pills');
-                 if (userPillsContainer && userData.all_users) {
-                     userPillsContainer.innerHTML = '';
-                     userData.all_users.forEach(user => {
-                         const pill = document.createElement('div');
-                         pill.className = 'user-pill';
-                         pill.textContent = user;
-                         pill.onclick = () => {
-                             document.getElementById('username').value = user;
-                         };
-                         userPillsContainer.appendChild(pill);
-                     });
-                 }
-             } catch (error) {
-                 console.error('Error loading users:', error);
-                 // Fallback to default users if API fails
-                 userData = { all_users: ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'] };
-             }
-         };
-         
-         function selectUser(username) {
-             document.getElementById('username').value = username;
-             document.getElementById('error').textContent = '';
+        function selectUser(username) {
+            document.getElementById('username').value = username;
+            document.getElementById('error').textContent = '';
         }
         
         function login() {
@@ -689,10 +643,23 @@ async def serve_login_page():
                 return;
             }
             
-            const validUsers = userData.all_users || ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
-        if (!validUsers.includes(username)) {
-                document.getElementById('error').textContent = 'Invalid username. Please select from authorized users.';
-                return;
+            // Fetch current users from server
+            try {
+                const response = await fetch('/api/users');
+                const userData = await response.json();
+                const validUsers = userData.all_users || ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU'];
+                
+                if (!validUsers.includes(username)) {
+                    document.getElementById('error').textContent = 'Invalid username. Please contact an admin to create your account.';
+                    return;
+                }
+            } catch (error) {
+                // Fallback to default users if API fails
+                const validUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU'];
+                if (!validUsers.includes(username)) {
+                    document.getElementById('error').textContent = 'Invalid username. Please select from authorized users.';
+                    return;
+                }
             }
             
             localStorage.setItem('username', username);
@@ -797,10 +764,6 @@ async def serve_dashboard():
             transition: all 0.2s;
             color: #64748b;
             font-weight: 500;
-        }
-        
-        .nav-item.hidden {
-            display: none !important;
         }
         
         .nav-item:hover {
@@ -1132,49 +1095,6 @@ async def serve_dashboard():
             100% { transform: scale(1); }
         }
         
-        /* Emotion Buttons */
-        .emotion-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 16px 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            background: white;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-align: center;
-            min-height: 80px;
-        }
-        
-        .emotion-btn:hover {
-            border-color: #10b981;
-            background: #f0fdf4;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
-        }
-        
-        .emotion-btn.selected {
-            border-color: #10b981;
-            background: #10b981;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-        }
-        
-        .emotion-emoji {
-            font-size: 24px;
-            margin-bottom: 8px;
-            display: block;
-        }
-        
-        .emotion-name {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: capitalize;
-        }
-        
         /* Responsive */
         @media (max-width: 768px) {
             .container {
@@ -1256,10 +1176,6 @@ async def serve_dashboard():
                     <div class="nav-icon">🔤</div>
                     Variants
                 </div>
-                <div class="nav-item hidden" id="adminTab" onclick="showPage('admin')">
-                    <div class="nav-icon">⚙️</div>
-                    Admin
-                </div>
             </nav>
             
             <div class="user-info">
@@ -1305,9 +1221,6 @@ async def serve_dashboard():
                     <button class="btn btn-danger" onclick="resetUserStats()" style="margin: 8px;">
                         <span class="btn-icon">🗑️</span> Reset My Statistics
                     </button>
-                    <button class="btn btn-secondary" onclick="debugAdminTab()" style="margin: 8px;">
-                        <span class="btn-icon">🔧</span> Debug Admin Tab
-                    </button>
                 </div>
                 
                 <div class="card">
@@ -1346,20 +1259,6 @@ async def serve_dashboard():
                             </button>
                         </div>
                         <div class="status status-info" id="recordStatus">Ready to record</div>
-                    </div>
-                </div>
-                
-                <div class="card" id="emotionSelection" style="display: none;">
-                    <h3 class="card-title">Select Emotion</h3>
-                    <p class="page-description">Choose the emotion that best represents the tone of your recording</p>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px;" id="emotionButtons">
-                        <!-- Emotion buttons will be loaded here -->
-                    </div>
-                    <div class="status status-info" id="selectedEmotion">Selected: None</div>
-                    <div style="margin-top: 16px;">
-                        <button class="btn btn-secondary" onclick="submitWithoutEmotion()" style="margin-right: 8px;">
-                            <span class="btn-icon">⏭️</span> Submit without Emotion
-                        </button>
                     </div>
                 </div>
                 
@@ -1404,19 +1303,11 @@ async def serve_dashboard():
             <div id="upload" class="content-area">
                 <div class="page-header">
                     <h1 class="page-title">Upload Text</h1>
-                    <p class="page-description">Upload text files to create private recording assignments</p>
+                    <p class="page-description">Upload text files to create recording assignments</p>
                 </div>
                 
                 <div class="card">
-                    <h3 class="card-title">Upload Private Text File</h3>
-                    <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <span style="font-size: 20px;">🔒</span>
-                            <strong style="color: #0369a1;">Private Upload for: <span id="uploadUsername"></span></strong>
-                        </div>
-                        <p style="color: #0369a1; margin: 0; font-size: 14px;">Only you will be able to see and record the text you upload. Admins can see all uploaded texts.</p>
-                    </div>
-                    
+                    <h3 class="card-title">Select Text File</h3>
                     <div class="upload-area" onclick="document.getElementById('fileInput').click()">
                         <div class="upload-icon">📄</div>
                         <div class="upload-title">Select Text File</div>
@@ -1563,37 +1454,6 @@ async def serve_dashboard():
                     </div>
                 </div>
             </div>
-            
-            <!-- Admin Page -->
-            <div id="admin" class="content-area">
-                <div class="page-header">
-                    <h1 class="page-title">Admin Panel</h1>
-                    <p class="page-description">Manage users and system settings</p>
-                </div>
-                
-                <div class="card">
-                    <h3 class="card-title">User Management</h3>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 20px; align-items: end;">
-                        <div>
-                            <label style="display: block; margin-bottom: 6px; font-weight: 500; color: #374151;">New Username:</label>
-                            <input type="text" id="newUsername" class="form-input" placeholder="Enter username" style="width: 100%;">
-                        </div>
-                        <button class="btn btn-primary" onclick="createUser()" style="height: 44px;">
-                            <span class="btn-icon">👤</span> Add User
-                        </button>
-                    </div>
-                    
-                    <div id="userManagementStatus" class="status status-info" style="display: none;"></div>
-                    
-                    <div style="margin-top: 24px;">
-                        <h4 style="margin-bottom: 12px; color: #374151;">Current Users:</h4>
-                        <div id="usersList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                            Loading users...
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
     
@@ -1609,8 +1469,6 @@ async def serve_dashboard():
         document.getElementById('userName').textContent = currentUsername;
         document.getElementById('userAvatar').textContent = currentUsername.charAt(0);
         
-        let isAdmin = false;
-        
         let isRecording = false;
         let mediaRecorder;
         let audioChunks = [];
@@ -1618,12 +1476,6 @@ async def serve_dashboard():
         
         // Navigation
         function showPage(pageId) {
-            // Check admin access for admin page
-            if (pageId === 'admin' && !isAdmin) {
-                showMessage('Access denied: Admin privileges required', 'error');
-                return;
-            }
-            
             // Hide all pages
             document.querySelectorAll('.content-area').forEach(area => {
                 area.classList.remove('active');
@@ -1644,20 +1496,10 @@ async def serve_dashboard():
             if (pageId === 'dashboard') {
                 loadStats();
             }
-            if (pageId === 'record') {
-                loadEmotionButtons();
-                loadNextParagraph();
-            }
-            if (pageId === 'upload') {
-                document.getElementById('uploadUsername').textContent = currentUsername;
-            }
             if (pageId === 'variants') {
                 loadLinkedWords();
                 loadVariantWords();
                 loadGrammarVariants();
-            }
-            if (pageId === 'admin') {
-                loadUsers();
             }
         }
         
@@ -1697,12 +1539,8 @@ async def serve_dashboard():
                 isRecording = false;
                 icon.textContent = '🔴';
                 btn.className = 'record-button stopped';
-                status.textContent = 'Recording stopped. Select an emotion to submit.';
+                status.textContent = 'Recording stopped. Ready to submit.';
                 status.className = 'status status-info';
-                
-                // Show emotion selection
-                document.getElementById('emotionSelection').style.display = 'block';
-                document.querySelector('#record .btn-primary').disabled = true; // Disable submit until emotion is selected
             }
         }
         
@@ -1754,108 +1592,40 @@ async def serve_dashboard():
             }
         }
         
-        let selectedEmotion = null;
-
-        function selectEmotion(emotion, btn) {
-            selectedEmotion = emotion;
-            document.getElementById('selectedEmotion').textContent = `Selected: ${emotion}`;
-            
-            // Visual feedback for selection
-            document.querySelectorAll('.emotion-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            
-            // Enable submit button
-            document.querySelector('#record .btn-primary').disabled = false;
-        }
-
-        function submitWithoutEmotion() {
-            selectedEmotion = 'none'; // Explicitly set to 'none'
-            submitRecording();
-        }
-
-        function resetRecordingState() {
-            selectedEmotion = null;
-            audioChunks = [];
-            isRecording = false;
-            
-            // Reset UI elements
-            const btn = document.getElementById('recordBtn');
-            const icon = document.getElementById('recordIcon');
-            const status = document.getElementById('recordStatus');
-            
-            if (btn) btn.className = 'record-button stopped';
-            if (icon) icon.textContent = '🔴';
-            if (status) {
-                status.textContent = 'Ready to record';
-                status.className = 'status status-info';
-            }
-            
-            // Hide emotion selection and reset
-            document.getElementById('emotionSelection').style.display = 'none';
-            document.getElementById('selectedEmotion').textContent = '';
-            document.querySelectorAll('.emotion-btn').forEach(b => b.classList.remove('selected'));
-            document.querySelector('#record .btn-primary').disabled = false;
-        }
-
-        async function loadEmotionButtons() {
-            try {
-                const response = await fetch('/api/emotions');
-                if (response.ok) {
-                    const emotions = await response.json();
-                    const container = document.getElementById('emotionButtons');
-                    
-                    if (container && emotions.emotions) {
-                        container.innerHTML = '';
-                        emotions.emotions.forEach(emotion => {
-                            const button = document.createElement('button');
-                            button.className = 'emotion-btn';
-                            button.textContent = emotion.emoji;
-                            button.title = emotion.name;
-                            button.onclick = () => selectEmotion(emotion.emoji, button);
-                            container.appendChild(button);
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading emotions:', error);
-            }
-        }
-
         async function submitRecording() {
             if (!currentParagraph || audioChunks.length === 0) {
-                showMessage('No recording to submit', 'warning');
+                const status = document.getElementById('recordStatus');
+                status.textContent = 'No recording to submit';
+                status.className = 'status status-warning';
                 return;
             }
-
-            if (!selectedEmotion) {
-                showMessage('Please select an emotion or submit without one', 'warning');
-                return;
-            }
-
+            
             try {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const formData = new FormData();
                 formData.append('username', currentUsername);
                 formData.append('text_final', document.getElementById('editedText').value);
-                formData.append('audio_file', audioBlob, `para_${currentParagraph.id}_user_${currentUsername}_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`);
-                formData.append('emotion', selectedEmotion);
-
+                formData.append('audio_file', audioBlob, 'recording.webm');
+                
                 const response = await fetch(`/api/para/${currentParagraph.id}/submit`, {
                     method: 'POST',
                     body: formData
                 });
-
+                
                 if (response.ok) {
-                    showMessage('Recording submitted successfully!', 'success');
-                    resetRecordingState();
+                    const status = document.getElementById('recordStatus');
+                    status.textContent = 'Recording submitted successfully!';
+                    status.className = 'status status-success';
+                    audioChunks = [];
                     setTimeout(loadNextParagraph, 1000);
                 } else {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Submission failed');
+                    throw new Error('Submission failed');
                 }
             } catch (error) {
                 console.error('Error submitting recording:', error);
-                showMessage(`Error: ${error.message}`, 'error');
+                const status = document.getElementById('recordStatus');
+                status.textContent = 'Error submitting recording';
+                status.className = 'status status-error';
             }
         }
         
@@ -1974,7 +1744,6 @@ async def serve_dashboard():
             
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('username', currentUsername);
             
             try {
                 const response = await fetch('/api/text/upload', {
@@ -1984,7 +1753,7 @@ async def serve_dashboard():
                 
                 if (response.ok) {
                     const result = await response.json();
-                    statusDiv.innerHTML = `<div class="status status-success">Successfully uploaded ${result.paragraphs_added} paragraphs for ${currentUsername}</div>`;
+                    statusDiv.innerHTML = `<div class="status status-success">Successfully uploaded ${result.paragraphs_added} paragraphs</div>`;
                     loadStats();
                 } else {
                     throw new Error('Upload failed');
@@ -2498,204 +2267,13 @@ async def serve_dashboard():
             }, 3000);
         }
 
-        // Admin functions
-        async function createUser() {
-            if (!isAdmin) {
-                showMessage('Access denied: Admin privileges required', 'error');
-                return;
-            }
-            
-            const username = document.getElementById('newUsername').value.trim();
-            if (!username) {
-                showMessage('Please enter a username', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        username: username, 
-                        admin_username: currentUsername 
-                    })
-                });
-                
-                if (response.ok) {
-                    document.getElementById('newUsername').value = '';
-                    showMessage('User created successfully!', 'success');
-                    loadUsers();
-                } else {
-                    const error = await response.text();
-                    showMessage(`Failed to create user: ${error}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error creating user:', error);
-                showMessage('Error creating user', 'error');
-            }
-        }
-        
-        async function loadUsers() {
-            if (!isAdmin) return;
-            
-            try {
-                const response = await fetch('/api/users');
-                if (response.ok) {
-                    const usersData = await response.json();
-                    // Extract the all_users array from the response
-                    const users = usersData.all_users || [];
-                    displayUsers(users);
-                } else {
-                    document.getElementById('usersList').innerHTML = 'Error loading users';
-                }
-            } catch (error) {
-                console.error('Error loading users:', error);
-                document.getElementById('usersList').innerHTML = 'Error loading users';
-            }
-        }
-        
-        function displayUsers(users) {
-            const usersList = document.getElementById('usersList');
-            if (users.length === 0) {
-                usersList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 20px;">No users found</p>';
-                return;
-            }
-            
-            let html = '';
-            users.forEach(user => {
-                const isCurrentUser = user === currentUsername;
-                const canDelete = !isCurrentUser && isAdmin;
-                
-                html += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #e2e8f0; background: ${isCurrentUser ? '#f0f9ff' : 'white'};">
-                        <div>
-                            <span style="font-weight: 500; color: #374151;">${user}</span>
-                            ${isCurrentUser ? '<span style="color: #3b82f6; font-size: 12px; margin-left: 8px;">(You)</span>' : ''}
-                        </div>
-                        ${canDelete ? `<button onclick="deleteUser('${user}')" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">Delete</button>` : ''}
-                    </div>
-                `;
-            });
-            
-            usersList.innerHTML = html;
-        }
-        
-        async function deleteUser(username) {
-            if (!isAdmin) {
-                showMessage('Access denied: Admin privileges required', 'error');
-                return;
-            }
-            
-            if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/users/${username}?admin_username=${currentUsername}`, {
-                    method: 'DELETE'
-                });
-                
-                if (response.ok) {
-                    showMessage('User deleted successfully!', 'success');
-                    loadUsers();
-                } else {
-                    const error = await response.text();
-                    showMessage(`Failed to delete user: ${error}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error deleting user:', error);
-                showMessage('Error deleting user', 'error');
-            }
-        }
-
-        // Test function to manually show admin tab
-        function testAdminTab() {
-            const adminTab = document.getElementById('adminTab');
-            if (adminTab) {
-                adminTab.style.display = 'flex';
-                console.log('Admin tab manually shown');
-            }
-        }
-        
-        // Debug function for admin tab
-        function debugAdminTab() {
-            console.log('=== MANUAL ADMIN DEBUG ===');
-            console.log('Current username from localStorage:', localStorage.getItem('username'));
-            console.log('Current username variable:', currentUsername);
-            console.log('isAdmin variable:', isAdmin);
-            
-            const adminTab = document.getElementById('adminTab');
-            console.log('Admin tab element:', adminTab);
-            
-            if (adminTab) {
-                console.log('Admin tab current styles:');
-                console.log('- display:', adminTab.style.display);
-                console.log('- visibility:', adminTab.style.visibility);
-                console.log('- opacity:', adminTab.style.opacity);
-                console.log('- computed display:', window.getComputedStyle(adminTab).display);
-                console.log('- computed visibility:', window.getComputedStyle(adminTab).visibility);
-                
-                // Force show the admin tab
-                  adminTab.classList.remove('hidden');
-                  console.log('Admin tab forced to visible by removing hidden class');
-                
-                alert('Admin tab debug complete - check console for details');
-            } else {
-                console.error('Admin tab element not found!');
-                alert('Admin tab element not found!');
-            }
-            
-            console.log('=== END MANUAL ADMIN DEBUG ===');
-        }
-        
-        // Check admin status dynamically
-        async function checkAdminStatus() {
-            try {
-                const response = await fetch(`/api/users/${currentUsername}`);
-                if (response.ok) {
-                    const userDetails = await response.json();
-                    isAdmin = userDetails.is_admin;
-                } else {
-                    // Fallback to hardcoded admin list if API fails
-                    const adminUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
-                    isAdmin = adminUsers.includes(currentUsername);
-                }
-                
-                // Show/hide admin tab based on status
-                const adminTab = document.getElementById('adminTab');
-                if (adminTab) {
-                    adminTab.classList.toggle('hidden', !isAdmin);
-                    console.log('Admin tab visibility updated. Is admin:', isAdmin);
-                }
-                
-                // Load users if admin
-                if (isAdmin) {
-                    loadUsers();
-                }
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                // Fallback to hardcoded admin list
-                const adminUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
-                isAdmin = adminUsers.includes(currentUsername);
-                
-                const adminTab = document.getElementById('adminTab');
-                if (adminTab) {
-                    adminTab.classList.toggle('hidden', !isAdmin);
-                }
-            }
-        }
-
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            // Add a small delay to ensure DOM is fully ready
-            setTimeout(function() {
-                checkAdminStatus();
-                loadStats();
-                loadNextParagraph();
-                loadLinkedWords();
-                loadVariantWords();
-                loadGrammarVariants();
-            }, 100);
+            loadStats();
+            loadNextParagraph();
+            loadLinkedWords();
+            loadVariantWords();
+            loadGrammarVariants();
         });
     </script>
 </body>
@@ -2933,13 +2511,6 @@ async def get_all_users():
     """Get all users and their roles."""
     return storage.get_all_users()
 
-@app.get("/api/users/{username}")
-async def get_user_details(username: str):
-    """Get user details including admin status."""
-    if username not in USERS:
-        raise HTTPException(status_code=404, detail="User not found")
-    return storage.get_user(username)
-
 @app.post("/api/users")
 async def create_user(user_data: UserManagement):
     """Create a new user (admin only)."""
@@ -2967,11 +2538,10 @@ async def delete_user(username: str, admin_username: str):
 @app.get("/api/emotions")
 async def get_emotion_emojis():
     """Get available emotion emojis for labeling."""
-    emotions_list = [{"emoji": emoji, "name": name} for emoji, name in EMOTION_EMOJIS.items()]
-    return {"emotions": emotions_list}
+    return {"emotions": EMOTION_EMOJIS}
 
 @app.post("/api/text/upload")
-async def upload_text(file: UploadFile = File(...), username: str = Form(...)):
+async def upload_text(file: UploadFile = File(...)):
     """Upload a text file and split it into paragraphs."""
     try:
         content = await file.read()
@@ -3012,10 +2582,10 @@ async def upload_text(file: UploadFile = File(...), username: str = Form(...)):
             segments = split_into_segments(paragraph)
             all_segments.extend(segments)
         
-        # Add segments to storage with the username
+        # Add segments to storage
         added_count = 0
         for segment_text in all_segments:
-            storage.add_paragraph(segment_text, uploaded_by=username)
+            storage.add_paragraph(segment_text)
             added_count += 1
         
         return {"success": True, "paragraphs_added": added_count}
@@ -3136,9 +2706,5 @@ This ZIP file contains:
 if __name__ == "__main__":
     import uvicorn
     import os
-    logger.info("Starting server...")
-    try:
-        port = int(os.environ.get("PORT", 8008))
-        uvicorn.run(app, host="0.0.0.0", port=port)
-    except Exception as e:
-        logger.exception(f"Server failed to start: {e}")
+    port = int(os.environ.get("PORT", 8002))
+    uvicorn.run(app, host="0.0.0.0", port=port)

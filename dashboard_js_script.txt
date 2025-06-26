@@ -1,0 +1,731 @@
+<script>
+        // Global variables
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let currentParagraph = null;
+        let currentUser = null;
+        let selectedEmotion = null;
+        let isAdmin = false;
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get username from URL or localStorage
+            const urlParams = new URLSearchParams(window.location.search);
+            currentUser = urlParams.get('user') || localStorage.getItem('username');
+            
+            if (!currentUser) {
+                // Redirect to login if no user
+                window.location.href = '/';
+                return;
+            }
+            
+            // Set user info
+            document.getElementById('userName').textContent = currentUser;
+            document.getElementById('userAvatar').textContent = currentUser.charAt(0);
+            
+            // Check if user is admin
+            checkAdminStatus();
+            
+            // Load initial data
+            loadNextParagraph();
+            loadStats();
+            loadLinkedWords();
+            loadVariantWords();
+            loadUsers();
+            loadEmotionButtons();
+        });
+        
+        // Check if user is admin
+        async function checkAdminStatus() {
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+                
+                isAdmin = data.admins.includes(currentUser);
+                
+                // Show/hide admin tab based on status
+                document.getElementById('adminTab').style.display = isAdmin ? 'flex' : 'none';
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+            }
+        }
+        
+        // Tab navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            
+            // Update active nav link
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Find the nav link that corresponds to this tab and make it active
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if (link.textContent.trim().toLowerCase().includes(tabId.toLowerCase())) {
+                    link.classList.add('active');
+                }
+            });
+        }
+        
+        // Load next paragraph
+        async function loadNextParagraph() {
+            try {
+                const response = await fetch(`/api/para/next?username=${currentUser}`);
+                
+                if (response.status === 404) {
+                    // No more paragraphs
+                    document.getElementById('paragraphContainer').innerHTML = `
+                        <div class="alert alert-info">
+                            No more paragraphs available for recording.
+                        </div>
+                    `;
+                    document.getElementById('recordBtn').disabled = true;
+                    document.getElementById('skipBtn').disabled = true;
+                    return;
+                }
+                
+                const data = await response.json();
+                currentParagraph = data;
+                
+                // Display paragraph
+                document.getElementById('originalText').textContent = data.text_original;
+                document.getElementById('editableText').textContent = data.text_original;
+                
+                // Reset recording state
+                resetRecordingState();
+            } catch (error) {
+                console.error('Error loading paragraph:', error);
+                alert('Error loading next paragraph. Please try again.');
+            }
+        }
+        
+        // Toggle recording
+        async function toggleRecording() {
+            if (isRecording) {
+                // Stop recording
+                mediaRecorder.stop();
+            } else {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+                    
+                    mediaRecorder.addEventListener('stop', () => {
+                    isRecording = false;
+                    document.getElementById('recordBtn').textContent = '🎤 Start Recording';
+                    document.getElementById('recordingStatus').textContent = 'Please select an emotion for your recording';
+                    document.getElementById('recordingIndicator').classList.remove('recording');
+                    document.getElementById('recordingIndicator').classList.add('idle');
+                    document.getElementById('emotionSelection').style.display = 'block';
+                    document.getElementById('submitBtn').disabled = true;
+                });
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    document.getElementById('recordBtn').textContent = '⏹️ Stop Recording';
+                    document.getElementById('recordingStatus').textContent = 'Recording in progress...';
+                    document.getElementById('recordingIndicator').classList.remove('idle');
+                    document.getElementById('recordingIndicator').classList.add('recording');
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    alert('Could not access microphone. Please check permissions.');
+                }
+            }
+        }
+        
+        // Select emotion for recording
+        function selectEmotion(emoji) {
+            selectedEmotion = emoji;
+            document.getElementById('selectedEmotion').textContent = `Selected: ${emoji}`;
+            
+            // Update UI to show selected emotion
+            document.querySelectorAll('.emotion-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                if (btn.dataset.emotion === emoji) {
+                    btn.classList.add('selected');
+                }
+            });
+            
+            // Enable submit button when emotion is selected
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('recordingStatus').textContent = 'Ready to submit with emotion: ' + emoji;
+        }
+        
+
+        
+        // Submit recording
+        async function submitRecording() {
+            if (!currentParagraph || audioChunks.length === 0) {
+                alert('No recording available to submit.');
+                return;
+            }
+            
+            if (!selectedEmotion) {
+                alert('Please select an emotion for your recording before submitting.');
+                return;
+            }
+            
+            try {
+                document.getElementById('submitBtn').disabled = true;
+                document.getElementById('recordingStatus').textContent = 'Submitting recording...';
+                
+                // Create audio blob and form data
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const formData = new FormData();
+                formData.append('audio_file', audioBlob, 'recording.webm');
+                formData.append('username', currentUser);
+                formData.append('text_final', document.getElementById('editableText').textContent);
+                
+                // Add emotion if selected
+                if (selectedEmotion) {
+                    formData.append('emotion', selectedEmotion);
+                }
+                
+                // Submit to API
+                const response = await fetch(`/api/para/${currentParagraph.id}/submit`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Recording submitted successfully!');
+                    loadNextParagraph();
+                    loadStats(); // Refresh stats
+                } else {
+                    alert('Error submitting recording. Please try again.');
+                    resetRecordingState();
+                }
+            } catch (error) {
+                console.error('Error submitting recording:', error);
+                alert('Error submitting recording. Please try again.');
+                resetRecordingState();
+            }
+        }
+        
+        // Skip paragraph
+        async function skipParagraph() {
+            if (!currentParagraph) return;
+            
+            try {
+                const response = await fetch(`/api/para/${currentParagraph.id}/skip?username=${currentUser}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadNextParagraph();
+                } else {
+                    alert('Error skipping paragraph. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error skipping paragraph:', error);
+                alert('Error skipping paragraph. Please try again.');
+            }
+        }
+        
+        // Reset recording state
+        function resetRecordingState() {
+            isRecording = false;
+            audioChunks = [];
+            document.getElementById('recordBtn').textContent = '🎤 Start Recording';
+            document.getElementById('recordBtn').disabled = false;
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('skipBtn').disabled = false;
+            document.getElementById('recordingStatus').textContent = 'Ready to record';
+            document.getElementById('recordingIndicator').classList.remove('recording');
+            document.getElementById('recordingIndicator').classList.add('idle');
+            document.getElementById('emotionSelection').style.display = 'none';
+            selectedEmotion = null;
+            document.getElementById('selectedEmotion').textContent = 'Selected: None';
+            document.querySelectorAll('.emotion-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+        }
+        
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                // Update stats grid
+                const statsGrid = document.getElementById('statsGrid');
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${data.total_paragraphs}</div>
+                        <div class="stat-label">Total Paragraphs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.completed_paragraphs}</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.assigned_paragraphs}</div>
+                        <div class="stat-label">Assigned</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.total_recordings}</div>
+                        <div class="stat-label">Recordings</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.total_recording_minutes.toFixed(1)}</div>
+                        <div class="stat-label">Recording Minutes</div>
+                    </div>
+                `;
+                
+                // Update user stats table
+                const userStatsTable = document.getElementById('userStatsTable').querySelector('tbody');
+                userStatsTable.innerHTML = '';
+                
+                for (const user in data.user_stats) {
+                    const stats = data.user_stats[user];
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user}</td>
+                        <td>${stats.recordings}</td>
+                        <td>${stats.paragraphs_completed}</td>
+                        <td>${stats.transcription_minutes.toFixed(1)}</td>
+                    `;
+                    userStatsTable.appendChild(row);
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load emotion buttons
+        async function loadEmotionButtons() {
+            try {
+                const response = await fetch('/api/emotions');
+                const data = await response.json();
+                
+                const emotionButtonsContainer = document.getElementById('emotionButtons');
+                emotionButtonsContainer.innerHTML = '';
+                
+                data.emotions.forEach(emotion => {
+                    const button = document.createElement('div');
+                    button.className = 'emotion-btn';
+                    button.dataset.emotion = emotion.emoji;
+                    button.onclick = () => selectEmotion(emotion.emoji);
+                    
+                    button.innerHTML = `
+                        <span class="emotion-emoji">${emotion.emoji}</span>
+                        <span class="emotion-name">${emotion.name}</span>
+                    `;
+                    
+                    emotionButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error('Error loading emotion buttons:', error);
+            }
+        }
+        
+        // Report variant
+        async function reportVariant() {
+            const word = document.getElementById('variantWord').value.trim();
+            const suggestion = document.getElementById('variantSuggestion').value.trim();
+            
+            if (!word || !suggestion) {
+                alert('Please enter both word and suggestion.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/variants', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        word: word,
+                        suggestion: suggestion,
+                        reporter: currentUser
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Variant reported successfully!');
+                    document.getElementById('variantWord').value = '';
+                    document.getElementById('variantSuggestion').value = '';
+                } else {
+                    alert('Error reporting variant. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error reporting variant:', error);
+                alert('Error reporting variant. Please try again.');
+            }
+        }
+        
+        // Add linked word
+        async function addLinkedWord() {
+            const wrong = document.getElementById('wrongWord').value.trim();
+            const correct = document.getElementById('correctWord').value.trim();
+            
+            if (!wrong || !correct) {
+                alert('Please enter both wrong and correct forms.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/linked_words', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        wrong: wrong,
+                        correct: correct,
+                        reporter: currentUser
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Linked word added successfully!');
+                    document.getElementById('wrongWord').value = '';
+                    document.getElementById('correctWord').value = '';
+                    loadLinkedWords();
+                } else {
+                    alert('Error adding linked word. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error adding linked word:', error);
+                alert('Error adding linked word. Please try again.');
+            }
+        }
+        
+        // Load linked words
+        async function loadLinkedWords() {
+            try {
+                const response = await fetch('/api/linked_words');
+                const data = await response.json();
+                
+                const linkedWordsTable = document.getElementById('linkedWordsTable').querySelector('tbody');
+                linkedWordsTable.innerHTML = '';
+                
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td dir="rtl">${item.wrong}</td>
+                        <td dir="rtl">${item.correct}</td>
+                        <td>${item.reporter}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="deleteLinkedWord('${item.wrong}', '${item.correct}')">
+                                Delete
+                            </button>
+                        </td>
+                    `;
+                    linkedWordsTable.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading linked words:', error);
+            }
+        }
+        
+        // Delete linked word
+        async function deleteLinkedWord(wrong, correct) {
+            if (!confirm('Are you sure you want to delete this linked word?')) return;
+            
+            try {
+                const response = await fetch(`/api/linked_words/${encodeURIComponent(wrong)}/${encodeURIComponent(correct)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Linked word deleted successfully!');
+                    loadLinkedWords();
+                } else {
+                    alert('Error deleting linked word. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error deleting linked word:', error);
+                alert('Error deleting linked word. Please try again.');
+            }
+        }
+        
+        // Add variant word
+        async function addVariantWord() {
+            const canonical = document.getElementById('canonicalWord').value.trim();
+            const variant = document.getElementById('variantForm').value.trim();
+            
+            if (!canonical || !variant) {
+                alert('Please enter both canonical and variant forms.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/variant_words', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        canonical: canonical,
+                        variant: variant,
+                        reporter: currentUser
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Variant word added successfully!');
+                    document.getElementById('canonicalWord').value = '';
+                    document.getElementById('variantForm').value = '';
+                    loadVariantWords();
+                } else {
+                    alert('Error adding variant word. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error adding variant word:', error);
+                alert('Error adding variant word. Please try again.');
+            }
+        }
+        
+        // Load variant words
+        async function loadVariantWords() {
+            try {
+                const response = await fetch('/api/variant_words');
+                const data = await response.json();
+                
+                const container = document.getElementById('variantWordsContainer');
+                container.innerHTML = '';
+                
+                data.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.marginBottom = '16px';
+                    
+                    let variantsHtml = '';
+                    item.variants.forEach(variant => {
+                        variantsHtml += `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span dir="rtl">${variant}</span>
+                                <button class="btn btn-danger btn-sm" onclick="deleteVariantWord('${item.canonical}', '${variant}')">
+                                    Delete
+                                </button>
+                            </div>
+                        `;
+                    });
+                    
+                    card.innerHTML = `
+                        <h3 class="card-title" dir="rtl">${item.canonical}</h3>
+                        <div style="margin-top: 12px;">
+                            ${variantsHtml}
+                        </div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading variant words:', error);
+            }
+        }
+        
+        // Delete variant word
+        async function deleteVariantWord(canonical, variant) {
+            if (!confirm('Are you sure you want to delete this variant?')) return;
+            
+            try {
+                const response = await fetch(`/api/variant_words/${encodeURIComponent(canonical)}/${encodeURIComponent(variant)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Variant word deleted successfully!');
+                    loadVariantWords();
+                } else {
+                    alert('Error deleting variant word. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error deleting variant word:', error);
+                alert('Error deleting variant word. Please try again.');
+            }
+        }
+        
+        // Admin functions
+        
+        // Load users
+        async function loadUsers() {
+            if (!isAdmin) return;
+            
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+                
+                const usersTable = document.getElementById('usersTable').querySelector('tbody');
+                usersTable.innerHTML = '';
+                
+                // Add admins
+                data.admins.forEach(username => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${username}</td>
+                        <td>Admin</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" disabled>
+                                Cannot Remove Admin
+                            </button>
+                        </td>
+                    `;
+                    usersTable.appendChild(row);
+                });
+                
+                // Add regular users
+                data.regular_users.forEach(username => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${username}</td>
+                        <td>User</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="deleteUser('${username}')">
+                                Remove
+                            </button>
+                        </td>
+                    `;
+                    usersTable.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+        
+        // Add new user
+        async function addNewUser() {
+            if (!isAdmin) {
+                alert('Only admins can add users.');
+                return;
+            }
+            
+            const username = document.getElementById('newUsername').value.trim().toUpperCase();
+            
+            if (!username) {
+                alert('Please enter a username.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        admin_username: currentUser
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('User added successfully!');
+                    document.getElementById('newUsername').value = '';
+                    loadUsers();
+                } else {
+                    alert('Error adding user. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error adding user:', error);
+                alert('Error adding user. Please try again.');
+            }
+        }
+        
+        // Delete user
+        async function deleteUser(username) {
+            if (!isAdmin) {
+                alert('Only admins can delete users.');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete user ${username}?`)) return;
+            
+            try {
+                const response = await fetch(`/api/users/${encodeURIComponent(username)}?admin_username=${encodeURIComponent(currentUser)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('User deleted successfully!');
+                    loadUsers();
+                } else {
+                    alert('Error deleting user. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Error deleting user. Please try again.');
+            }
+        }
+        
+        // Upload text file
+        async function uploadTextFile() {
+            if (!isAdmin) {
+                alert('Only admins can upload text files.');
+                return;
+            }
+            
+            const fileInput = document.getElementById('textFileUpload');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Please select a file to upload.');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/api/text/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`File uploaded successfully! ${data.paragraphs_added} paragraphs added.`);
+                    fileInput.value = '';
+                } else {
+                    alert('Error uploading file. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                alert('Error uploading file. Please try again.');
+            }
+        }
+        
+        // Export recordings
+        function exportRecordings() {
+            window.location.href = '/api/export/recordings';
+        }
+        
+        // Export statistics
+        function exportStatistics() {
+            window.location.href = '/api/export/statistics';
+        }
+    </script>
