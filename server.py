@@ -18,22 +18,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Import normalizer functionality
-from hassy_normalizer import (
-    normalize_text,
-    get_normalizer_stats,
-    word_diff_simple,
-    format_diff_html,
-    get_change_stats,
-)
-from hassy_normalizer.data_loader import _get_data_file_path, _get_writable_data_path, clear_cache
-
-# Log the normalizer version at startup
-import importlib.metadata
 try:
-    version = importlib.metadata.version("hassy-normalizer")
-    print(f"Hassy-Normalizer v{version}")
-except Exception as e:
-    print(f"Could not get normalizer version: {e}")
+    from src.hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
+    from src.hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
+except ImportError:
+    # Fallback functions if normalizer is not available
+    def normalize_text(text: str) -> str:
+        return text.replace('ڤ', 'ف').replace('ڨ', 'ق')
+    
+    def get_normalizer_stats() -> Dict[str, int]:
+        return {"variants_loaded": 0, "exceptions_loaded": 0, "unknown_variants": 0}
+    
+    def word_diff_simple(text: str) -> List:
+        return []
+    
+    def format_diff_html(diff_entries: List) -> str:
+        return "Diff functionality not available"
+    
+    def get_change_stats(diff_entries: List) -> Dict[str, Any]:
+        return {"total_words": 0, "changed_words": 0, "change_percentage": 0.0}
 
 # Simple in-memory storage
 class SimpleStorage:
@@ -100,12 +103,13 @@ class SimpleStorage:
                 return True
         return False
     
-    def add_recording(self, para_id: int, username: str, filename: str):
+    def add_recording(self, para_id: int, username: str, filename: str, emotion: str = None):
         recording = {
             "id": len(self.recordings) + 1,
             "paragraph_id": para_id,
             "user": username,
             "filename": filename,
+            "emotion": emotion,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         self.recordings.append(recording)
@@ -131,14 +135,12 @@ class SimpleStorage:
     
     def add_linked_word(self, wrong: str, correct: str, reporter: str):
         """Add a linked word pair and update the JSON file in real-time"""
-        # Read from existing location first
-        read_file = _get_data_file_path("linked_words.json")
-        write_file = _get_writable_data_path("linked_words.json")
+        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
         
         # Load existing data
         try:
-            if read_file.exists():
-                with open(read_file, 'r', encoding='utf-8') as f:
+            if linked_words_file.exists():
+                with open(linked_words_file, 'r', encoding='utf-8') as f:
                     linked_words = json.load(f)
             else:
                 linked_words = []
@@ -160,14 +162,12 @@ class SimpleStorage:
         if not exists:
             linked_words.append(new_entry)
             
-            # Save to writable file
+            # Save to file
             try:
-                 write_file.parent.mkdir(parents=True, exist_ok=True)
-                 with open(write_file, 'w', encoding='utf-8') as f:
-                     json.dump(linked_words, f, ensure_ascii=False, indent=2)
-                 # Clear cache so normalizer uses updated data
-                 clear_cache()
-                 return len(linked_words)
+                linked_words_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(linked_words_file, 'w', encoding='utf-8') as f:
+                    json.dump(linked_words, f, ensure_ascii=False, indent=2)
+                return len(linked_words)
             except Exception as e:
                 print(f"Error saving linked words: {e}")
                 return None
@@ -175,15 +175,13 @@ class SimpleStorage:
     
     def add_variant_word(self, canonical: str, variant: str, reporter: str):
         """Add a variant word and update the JSONL file in real-time"""
-        # Read from existing location first
-        read_file = _get_data_file_path("hassaniya_variants.jsonl")
-        write_file = _get_writable_data_path("hassaniya_variants.jsonl")
+        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
         
         # Load existing data
         variants_data = {}
         try:
-            if read_file.exists():
-                with open(read_file, 'r', encoding='utf-8') as f:
+            if variants_file.exists():
+                with open(variants_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
                             entry = json.loads(line)
@@ -200,18 +198,16 @@ class SimpleStorage:
         else:
             variants_data[canonical] = [variant]
         
-        # Save to writable file
+        # Save to file
         try:
-            write_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(write_file, 'w', encoding='utf-8') as f:
+            variants_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(variants_file, 'w', encoding='utf-8') as f:
                 for canonical_word, variant_list in variants_data.items():
                     entry = {
                         "canonical": canonical_word,
                         "variants": variant_list
                     }
                     f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-            # Clear cache so normalizer uses updated data
-            clear_cache()
             return len(variants_data)
         except Exception as e:
             print(f"Error saving variant words: {e}")
@@ -219,7 +215,7 @@ class SimpleStorage:
     
     def get_linked_words(self):
         """Get all linked words from the JSON file"""
-        linked_words_file = _get_data_file_path("linked_words.json")
+        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
         try:
             if linked_words_file.exists():
                 with open(linked_words_file, 'r', encoding='utf-8') as f:
@@ -230,7 +226,7 @@ class SimpleStorage:
     
     def get_variant_words(self):
         """Get all variant words from the JSONL file"""
-        variants_file = _get_data_file_path("hassaniya_variants.jsonl")
+        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
         variants = []
         try:
             if variants_file.exists():
@@ -244,22 +240,19 @@ class SimpleStorage:
     
     def delete_linked_word(self, wrong: str, correct: str):
         """Delete a linked word pair from the JSON file"""
-        # Read from existing location first
-        read_file = _get_data_file_path("linked_words.json")
-        write_file = _get_writable_data_path("linked_words.json")
+        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
         
         try:
-            if read_file.exists():
-                with open(read_file, 'r', encoding='utf-8') as f:
+            if linked_words_file.exists():
+                with open(linked_words_file, 'r', encoding='utf-8') as f:
                     linked_words = json.load(f)
                 
                 # Remove the entry
                 linked_words = [item for item in linked_words 
                               if not (item.get("wrong") == wrong and item.get("correct") == correct)]
                 
-                # Save back to writable file
-                write_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(write_file, 'w', encoding='utf-8') as f:
+                # Save back to file
+                with open(linked_words_file, 'w', encoding='utf-8') as f:
                     json.dump(linked_words, f, ensure_ascii=False, indent=2)
                 
                 return True
@@ -270,14 +263,12 @@ class SimpleStorage:
     
     def delete_variant_word(self, canonical: str, variant: str = None):
         """Delete a variant word or entire canonical entry from the JSONL file"""
-        # Read from existing location first
-        read_file = _get_data_file_path("hassaniya_variants.jsonl")
-        write_file = _get_writable_data_path("hassaniya_variants.jsonl")
+        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
         
         try:
-            if read_file.exists():
+            if variants_file.exists():
                 variants_data = {}
-                with open(read_file, 'r', encoding='utf-8') as f:
+                with open(variants_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
                             entry = json.loads(line)
@@ -295,9 +286,8 @@ class SimpleStorage:
                         # Remove entire canonical entry
                         del variants_data[canonical]
                 
-                # Save back to writable file
-                write_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(write_file, 'w', encoding='utf-8') as f:
+                # Save back to file
+                with open(variants_file, 'w', encoding='utf-8') as f:
                     for canonical_word, variant_list in variants_data.items():
                         entry = {
                             "canonical": canonical_word,
@@ -336,6 +326,39 @@ class SimpleStorage:
             return True
         except Exception:
             return False
+    
+    def add_user(self, username: str, created_by: str) -> bool:
+        """Add a new user (admin only function)."""
+        global USERS
+        if username.upper() not in USERS:
+            USERS.append(username.upper())
+            return True
+        return False
+    
+    def remove_user(self, username: str, removed_by: str) -> bool:
+        """Remove a user (admin only function)."""
+        global USERS
+        if username.upper() in USERS and username.upper() not in ADMINS:
+            USERS.remove(username.upper())
+            # Also reset their stats
+            self.reset_user_stats(username.upper())
+            return True
+        return False
+    
+    def get_all_users(self) -> Dict[str, Any]:
+        """Get all users with their roles."""
+        return {
+            "admins": ADMINS,
+            "regular_users": [u for u in USERS if u not in ADMINS],
+            "all_users": USERS
+        }
+    
+    def get_user(self, username: str) -> Dict[str, Any]:
+        """Get user details including admin status."""
+        return {
+            "username": username,
+            "is_admin": username in ADMINS
+        }
     
     def get_stats(self) -> Dict[str, Any]:
         total = len(self.paragraphs)
@@ -410,8 +433,23 @@ AUDIO_DIR = DATA_DIR / "audio"
 DATA_DIR.mkdir(exist_ok=True)
 AUDIO_DIR.mkdir(exist_ok=True)
 
-# Users that can login
-USERS = ["EMIN", "ETHMAN", "ZAIN", "MOUHAMEDOU"]
+# Users that can login and their roles
+ADMINS = ["EMIN", "ETHMAN", "ZAIN", "MOUHAMEDOU", "SUPERADMIN"]
+USERS = ADMINS.copy()  # Start with admins as users
+
+# Emotion emojis for audio labeling
+EMOTION_EMOJIS = {
+    "😠": "angry",
+    "😂": "funny", 
+    "😢": "sad",
+    "😊": "happy",
+    "😐": "neutral",
+    "😨": "scared",
+    "😍": "loving",
+    "🤔": "thoughtful",
+    "😤": "frustrated",
+    "😴": "tired"
+}
 
 # API Models
 class NormalizationRequest(BaseModel):
@@ -436,6 +474,17 @@ class VariantWordReport(BaseModel):
     variant: str
     reporter: str
 
+class UserManagement(BaseModel):
+    username: str
+    admin_username: str
+
+class UserDetails(BaseModel):
+    username: str
+    is_admin: bool
+
+class EmotionSubmission(BaseModel):
+    emotion: str
+
 # Create FastAPI app
 app = FastAPI(
     title="Hassaniya Unified Platform",
@@ -455,6 +504,10 @@ app.add_middleware(
 def authenticate_user(username: str) -> bool:
     """Check if user is valid."""
     return username in USERS
+
+def is_admin(username: str) -> bool:
+    """Check if user is an admin."""
+    return username in ADMINS
 
 @app.get("/healthz")
 async def health_check():
@@ -580,18 +633,44 @@ async def serve_login_page():
         <div class="users-list">
             <h3>Authorized Users:</h3>
             <div class="user-pills">
-                <span class="user-pill" onclick="selectUser('EMIN')">EMIN</span>
-                <span class="user-pill" onclick="selectUser('ETHMAN')">ETHMAN</span>
-                <span class="user-pill" onclick="selectUser('ZAIN')">ZAIN</span>
-                <span class="user-pill" onclick="selectUser('MOUHAMEDOU')">MOUHAMEDOU</span>
+                <!-- User pills will be dynamically loaded here -->
             </div>
         </div>
     </div>
     
     <script>
-        function selectUser(username) {
-            document.getElementById('username').value = username;
-            document.getElementById('error').textContent = '';
+        let userData = null;
+         
+         // Load user data on page load
+         window.onload = async function() {
+             try {
+                 const response = await fetch('/api/users');
+                 userData = await response.json();
+                 
+                 // Update user pills
+                 const userPillsContainer = document.querySelector('.user-pills');
+                 if (userPillsContainer && userData.all_users) {
+                     userPillsContainer.innerHTML = '';
+                     userData.all_users.forEach(user => {
+                         const pill = document.createElement('div');
+                         pill.className = 'user-pill';
+                         pill.textContent = user;
+                         pill.onclick = () => {
+                             document.getElementById('username').value = user;
+                         };
+                         userPillsContainer.appendChild(pill);
+                     });
+                 }
+             } catch (error) {
+                 console.error('Error loading users:', error);
+                 // Fallback to default users if API fails
+                 userData = { all_users: ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'] };
+             }
+         };
+         
+         function selectUser(username) {
+             document.getElementById('username').value = username;
+             document.getElementById('error').textContent = '';
         }
         
         function login() {
@@ -601,8 +680,8 @@ async def serve_login_page():
                 return;
             }
             
-            const validUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU'];
-            if (!validUsers.includes(username)) {
+            const validUsers = userData.all_users || ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
+        if (!validUsers.includes(username)) {
                 document.getElementById('error').textContent = 'Invalid username. Please select from authorized users.';
                 return;
             }
@@ -709,6 +788,10 @@ async def serve_dashboard():
             transition: all 0.2s;
             color: #64748b;
             font-weight: 500;
+        }
+        
+        .nav-item.hidden {
+            display: none !important;
         }
         
         .nav-item:hover {
@@ -1121,6 +1204,10 @@ async def serve_dashboard():
                     <div class="nav-icon">🔤</div>
                     Variants
                 </div>
+                <div class="nav-item hidden" id="adminTab" onclick="showPage('admin')">
+                    <div class="nav-icon">⚙️</div>
+                    Admin
+                </div>
             </nav>
             
             <div class="user-info">
@@ -1165,6 +1252,9 @@ async def serve_dashboard():
                     <h3 class="card-title">User Actions</h3>
                     <button class="btn btn-danger" onclick="resetUserStats()" style="margin: 8px;">
                         <span class="btn-icon">🗑️</span> Reset My Statistics
+                    </button>
+                    <button class="btn btn-secondary" onclick="debugAdminTab()" style="margin: 8px;">
+                        <span class="btn-icon">🔧</span> Debug Admin Tab
                     </button>
                 </div>
                 
@@ -1399,6 +1489,37 @@ async def serve_dashboard():
                     </div>
                 </div>
             </div>
+            
+            <!-- Admin Page -->
+            <div id="admin" class="content-area">
+                <div class="page-header">
+                    <h1 class="page-title">Admin Panel</h1>
+                    <p class="page-description">Manage users and system settings</p>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">User Management</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 20px; align-items: end;">
+                        <div>
+                            <label style="display: block; margin-bottom: 6px; font-weight: 500; color: #374151;">New Username:</label>
+                            <input type="text" id="newUsername" class="form-input" placeholder="Enter username" style="width: 100%;">
+                        </div>
+                        <button class="btn btn-primary" onclick="createUser()" style="height: 44px;">
+                            <span class="btn-icon">👤</span> Add User
+                        </button>
+                    </div>
+                    
+                    <div id="userManagementStatus" class="status status-info" style="display: none;"></div>
+                    
+                    <div style="margin-top: 24px;">
+                        <h4 style="margin-bottom: 12px; color: #374151;">Current Users:</h4>
+                        <div id="usersList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                            Loading users...
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1414,6 +1535,8 @@ async def serve_dashboard():
         document.getElementById('userName').textContent = currentUsername;
         document.getElementById('userAvatar').textContent = currentUsername.charAt(0);
         
+        let isAdmin = false;
+        
         let isRecording = false;
         let mediaRecorder;
         let audioChunks = [];
@@ -1421,6 +1544,12 @@ async def serve_dashboard():
         
         // Navigation
         function showPage(pageId) {
+            // Check admin access for admin page
+            if (pageId === 'admin' && !isAdmin) {
+                showMessage('Access denied: Admin privileges required', 'error');
+                return;
+            }
+            
             // Hide all pages
             document.querySelectorAll('.content-area').forEach(area => {
                 area.classList.remove('active');
@@ -1445,6 +1574,9 @@ async def serve_dashboard():
                 loadLinkedWords();
                 loadVariantWords();
                 loadGrammarVariants();
+            }
+            if (pageId === 'admin') {
+                loadUsers();
             }
         }
         
@@ -2212,13 +2344,204 @@ async def serve_dashboard():
             }, 3000);
         }
 
+        // Admin functions
+        async function createUser() {
+            if (!isAdmin) {
+                showMessage('Access denied: Admin privileges required', 'error');
+                return;
+            }
+            
+            const username = document.getElementById('newUsername').value.trim();
+            if (!username) {
+                showMessage('Please enter a username', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: username, 
+                        admin_username: currentUsername 
+                    })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('newUsername').value = '';
+                    showMessage('User created successfully!', 'success');
+                    loadUsers();
+                } else {
+                    const error = await response.text();
+                    showMessage(`Failed to create user: ${error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error creating user:', error);
+                showMessage('Error creating user', 'error');
+            }
+        }
+        
+        async function loadUsers() {
+            if (!isAdmin) return;
+            
+            try {
+                const response = await fetch('/api/users');
+                if (response.ok) {
+                    const usersData = await response.json();
+                    // Extract the all_users array from the response
+                    const users = usersData.all_users || [];
+                    displayUsers(users);
+                } else {
+                    document.getElementById('usersList').innerHTML = 'Error loading users';
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                document.getElementById('usersList').innerHTML = 'Error loading users';
+            }
+        }
+        
+        function displayUsers(users) {
+            const usersList = document.getElementById('usersList');
+            if (users.length === 0) {
+                usersList.innerHTML = '<p style="color: #64748b; text-align: center; padding: 20px;">No users found</p>';
+                return;
+            }
+            
+            let html = '';
+            users.forEach(user => {
+                const isCurrentUser = user === currentUsername;
+                const canDelete = !isCurrentUser && isAdmin;
+                
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #e2e8f0; background: ${isCurrentUser ? '#f0f9ff' : 'white'};">
+                        <div>
+                            <span style="font-weight: 500; color: #374151;">${user}</span>
+                            ${isCurrentUser ? '<span style="color: #3b82f6; font-size: 12px; margin-left: 8px;">(You)</span>' : ''}
+                        </div>
+                        ${canDelete ? `<button onclick="deleteUser('${user}')" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">Delete</button>` : ''}
+                    </div>
+                `;
+            });
+            
+            usersList.innerHTML = html;
+        }
+        
+        async function deleteUser(username) {
+            if (!isAdmin) {
+                showMessage('Access denied: Admin privileges required', 'error');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${username}?admin_username=${currentUsername}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showMessage('User deleted successfully!', 'success');
+                    loadUsers();
+                } else {
+                    const error = await response.text();
+                    showMessage(`Failed to delete user: ${error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                showMessage('Error deleting user', 'error');
+            }
+        }
+
+        // Test function to manually show admin tab
+        function testAdminTab() {
+            const adminTab = document.getElementById('adminTab');
+            if (adminTab) {
+                adminTab.style.display = 'flex';
+                console.log('Admin tab manually shown');
+            }
+        }
+        
+        // Debug function for admin tab
+        function debugAdminTab() {
+            console.log('=== MANUAL ADMIN DEBUG ===');
+            console.log('Current username from localStorage:', localStorage.getItem('username'));
+            console.log('Current username variable:', currentUsername);
+            console.log('isAdmin variable:', isAdmin);
+            
+            const adminTab = document.getElementById('adminTab');
+            console.log('Admin tab element:', adminTab);
+            
+            if (adminTab) {
+                console.log('Admin tab current styles:');
+                console.log('- display:', adminTab.style.display);
+                console.log('- visibility:', adminTab.style.visibility);
+                console.log('- opacity:', adminTab.style.opacity);
+                console.log('- computed display:', window.getComputedStyle(adminTab).display);
+                console.log('- computed visibility:', window.getComputedStyle(adminTab).visibility);
+                
+                // Force show the admin tab
+                  adminTab.classList.remove('hidden');
+                  console.log('Admin tab forced to visible by removing hidden class');
+                
+                alert('Admin tab debug complete - check console for details');
+            } else {
+                console.error('Admin tab element not found!');
+                alert('Admin tab element not found!');
+            }
+            
+            console.log('=== END MANUAL ADMIN DEBUG ===');
+        }
+        
+        // Check admin status dynamically
+        async function checkAdminStatus() {
+            try {
+                const response = await fetch(`/api/users/${currentUsername}`);
+                if (response.ok) {
+                    const userDetails = await response.json();
+                    isAdmin = userDetails.is_admin;
+                } else {
+                    // Fallback to hardcoded admin list if API fails
+                    const adminUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
+                    isAdmin = adminUsers.includes(currentUsername);
+                }
+                
+                // Show/hide admin tab based on status
+                const adminTab = document.getElementById('adminTab');
+                if (adminTab) {
+                    adminTab.classList.toggle('hidden', !isAdmin);
+                    console.log('Admin tab visibility updated. Is admin:', isAdmin);
+                }
+                
+                // Load users if admin
+                if (isAdmin) {
+                    loadUsers();
+                }
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                // Fallback to hardcoded admin list
+                const adminUsers = ['EMIN', 'ETHMAN', 'ZAIN', 'MOUHAMEDOU', 'SUPERADMIN'];
+                isAdmin = adminUsers.includes(currentUsername);
+                
+                const adminTab = document.getElementById('adminTab');
+                if (adminTab) {
+                    adminTab.classList.toggle('hidden', !isAdmin);
+                }
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            loadStats();
-            loadNextParagraph();
-            loadLinkedWords();
-            loadVariantWords();
-            loadGrammarVariants();
+            // Add a small delay to ensure DOM is fully ready
+            setTimeout(function() {
+                checkAdminStatus();
+                loadStats();
+                loadNextParagraph();
+                loadLinkedWords();
+                loadVariantWords();
+                loadGrammarVariants();
+            }, 100);
         });
     </script>
 </body>
@@ -2276,9 +2599,10 @@ async def submit_paragraph(
     para_id: int,
     username: str = Form(...),
     text_final: str = Form(...),
+    emotion: str = Form(None),
     audio_file: UploadFile = File(...)
 ):
-    """Submit a recorded paragraph."""
+    """Submit a recorded paragraph with emotion label."""
     if not authenticate_user(username):
         raise HTTPException(status_code=401, detail="Invalid user")
     
@@ -2296,10 +2620,10 @@ async def submit_paragraph(
         if not success:
             raise HTTPException(status_code=404, detail="Paragraph not found or not assigned to user")
         
-        # Add recording
-        storage.add_recording(para_id, username, filename)
+        # Add recording with emotion
+        storage.add_recording(para_id, username, filename, emotion)
         
-        return {"success": True, "id": para_id, "audio": filename}
+        return {"success": True, "id": para_id, "audio": filename, "emotion": emotion}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error submitting paragraph: {str(e)}")
@@ -2450,6 +2774,47 @@ async def reset_user_stats(username: str):
     else:
         raise HTTPException(status_code=500, detail="Failed to reset user statistics")
 
+@app.get("/api/users")
+async def get_all_users():
+    """Get all users and their roles."""
+    return storage.get_all_users()
+
+@app.get("/api/users/{username}")
+async def get_user_details(username: str):
+    """Get user details including admin status."""
+    if username not in USERS:
+        raise HTTPException(status_code=404, detail="User not found")
+    return storage.get_user(username)
+
+@app.post("/api/users")
+async def create_user(user_data: UserManagement):
+    """Create a new user (admin only)."""
+    if not is_admin(user_data.admin_username):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    success = storage.add_user(user_data.username, user_data.admin_username)
+    if success:
+        return {"success": True, "message": f"User {user_data.username} created successfully"}
+    else:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+@app.delete("/api/users/{username}")
+async def delete_user(username: str, admin_username: str):
+    """Delete a user (admin only)."""
+    if not is_admin(admin_username):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    success = storage.remove_user(username, admin_username)
+    if success:
+        return {"success": True, "message": f"User {username} deleted successfully"}
+    else:
+        raise HTTPException(status_code=400, detail="Cannot delete admin user or user not found")
+
+@app.get("/api/emotions")
+async def get_emotion_emojis():
+    """Get available emotion emojis for labeling."""
+    return {"emotions": EMOTION_EMOJIS}
+
 @app.post("/api/text/upload")
 async def upload_text(file: UploadFile = File(...)):
     """Upload a text file and split it into paragraphs."""
@@ -2514,7 +2879,7 @@ async def serve_audio(filename: str):
 
 @app.get("/api/export/recordings")
 async def export_recordings():
-    """Export recordings as a ZIP file."""
+    """Export recordings as a ZIP file with emotion data."""
     zip_buffer = io.BytesIO()
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -2524,6 +2889,10 @@ async def export_recordings():
         for recording in storage.recordings:
             paragraph = next((p for p in storage.paragraphs if p["id"] == recording["paragraph_id"]), None)
             if paragraph and paragraph["status"] == "done":
+                # Get emotion data if available
+                emotion = recording.get("emotion", None)
+                emotion_label = EMOTION_EMOJIS.get(emotion, None) if emotion else None
+                
                 jsonl_entry = {
                     "audio_file": recording["filename"],
                     "text": paragraph["text_final"] or paragraph["text_original"],
@@ -2531,7 +2900,9 @@ async def export_recordings():
                     "user": recording["user"],
                     "paragraph_id": recording["paragraph_id"],
                     "recording_id": recording["id"],
-                    "created_at": recording["created_at"]
+                    "created_at": recording["created_at"],
+                    "emotion_emoji": emotion,
+                    "emotion": emotion_label
                 }
                 jsonl_data.append(jsonl_entry)
         
@@ -2552,7 +2923,8 @@ This ZIP file contains:
 - transcriptions.jsonl: Metadata and transcriptions in JSONL format
 - recordings/: Audio files in WebM format
 
-The JSONL file is compatible with Whisper fine-tuning workflows.
+The JSONL file includes emotion labels and is compatible with Whisper fine-tuning workflows.
+Emotion labels can be used to train models to detect emotional content in speech.
 """
         zip_file.writestr("README.md", readme_content)
     
