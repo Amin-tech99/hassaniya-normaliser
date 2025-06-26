@@ -5,6 +5,9 @@
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# Install the package to ensure data files are included
+pip install -e .
+
 # Verify package installation
 python - <<'PY'
 import importlib.util, pkg_resources, json, pathlib, sys
