@@ -19,8 +19,8 @@ from pydantic import BaseModel
 
 # Import normalizer functionality
 try:
-    from src.hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
-    from src.hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
+    from hassy_normalizer.normalizer import normalize_text, get_stats as get_normalizer_stats
+    from hassy_normalizer.diff import word_diff_simple, format_diff_html, get_change_stats
 except ImportError:
     # Fallback functions if normalizer is not available
     def normalize_text(text: str) -> str:
