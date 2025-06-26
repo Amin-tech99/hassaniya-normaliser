@@ -26,8 +26,7 @@ except ImportError:
     def normalize_text(text: str) -> str:
         return text.replace('ڤ', 'ف').replace('ڨ', 'ق')
     
-    def get_normalizer_stats() -> Dict[str, int]:
-        return {"variants_loaded": 0, "exceptions_loaded": 0, "unknown_variants": 0}
+    # get_normalizer_stats is now imported from hassy_normalizer.normalizer
     
     def word_diff_simple(text: str) -> List:
         return []
