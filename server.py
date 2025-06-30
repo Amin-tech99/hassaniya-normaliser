@@ -144,17 +144,32 @@ class SimpleStorage:
     
     def add_linked_word(self, wrong: str, correct: str, reporter: str):
         """Add a linked word pair and update the JSON file in real-time"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/linked_words.json"),
+            Path("./src/hassy_normalizer/data/linked_words.json"),
+            Path("../src/hassy_normalizer/data/linked_words.json"),
+            Path("data/linked_words.json"),
+            Path("./data/linked_words.json")
+        ]
         
-        # Load existing data
-        try:
-            if linked_words_file.exists():
-                with open(linked_words_file, 'r', encoding='utf-8') as f:
-                    linked_words = json.load(f)
-            else:
-                linked_words = []
-        except Exception:
-            linked_words = []
+        linked_words_file = None
+        linked_words = []
+        
+        # Find existing file or use first path as default
+        for path in possible_paths:
+            try:
+                if path.exists():
+                    linked_words_file = path
+                    with open(path, 'r', encoding='utf-8') as f:
+                        linked_words = json.load(f)
+                    break
+            except Exception:
+                continue
+        
+        # If no existing file found, use first path
+        if linked_words_file is None:
+            linked_words_file = possible_paths[0]
         
         # Add new entry
         new_entry = {
@@ -184,19 +199,35 @@ class SimpleStorage:
     
     def add_variant_word(self, canonical: str, variant: str, reporter: str):
         """Add a variant word and update the JSONL file in real-time"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("./src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("../src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("data/hassaniya_variants.jsonl"),
+            Path("./data/hassaniya_variants.jsonl")
+        ]
         
-        # Load existing data
+        variants_file = None
         variants_data = {}
-        try:
-            if variants_file.exists():
-                with open(variants_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.strip():
-                            entry = json.loads(line)
-                            variants_data[entry["canonical"]] = entry["variants"]
-        except Exception:
-            variants_data = {}
+        
+        # Find existing file or use first path as default
+        for path in possible_paths:
+            try:
+                if path.exists():
+                    variants_file = path
+                    with open(path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if line.strip():
+                                entry = json.loads(line)
+                                variants_data[entry["canonical"]] = entry["variants"]
+                    break
+            except Exception:
+                continue
+        
+        # If no existing file found, use first path
+        if variants_file is None:
+            variants_file = possible_paths[0]
         
         # Add new variant
         if canonical in variants_data:
@@ -224,90 +255,125 @@ class SimpleStorage:
     
     def get_linked_words(self):
         """Get all linked words from the JSON file"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
-        try:
-            if linked_words_file.exists():
-                with open(linked_words_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception:
-            pass
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/linked_words.json"),
+            Path("./src/hassy_normalizer/data/linked_words.json"),
+            Path("../src/hassy_normalizer/data/linked_words.json"),
+            Path("data/linked_words.json"),
+            Path("./data/linked_words.json")
+        ]
+        
+        for linked_words_file in possible_paths:
+            try:
+                if linked_words_file.exists():
+                    with open(linked_words_file, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            except Exception:
+                continue
         return []
     
     def get_variant_words(self):
         """Get all variant words from the JSONL file"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("./src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("../src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("data/hassaniya_variants.jsonl"),
+            Path("./data/hassaniya_variants.jsonl")
+        ]
+        
         variants = []
-        try:
-            if variants_file.exists():
-                with open(variants_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.strip():
-                            variants.append(json.loads(line))
-        except Exception:
-            pass
+        for variants_file in possible_paths:
+            try:
+                if variants_file.exists():
+                    with open(variants_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if line.strip():
+                                variants.append(json.loads(line))
+                    return variants
+            except Exception:
+                continue
         return variants
     
     def delete_linked_word(self, wrong: str, correct: str):
         """Delete a linked word pair from the JSON file"""
-        linked_words_file = Path("src/hassy_normalizer/data/linked_words.json")
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/linked_words.json"),
+            Path("./src/hassy_normalizer/data/linked_words.json"),
+            Path("../src/hassy_normalizer/data/linked_words.json"),
+            Path("data/linked_words.json"),
+            Path("./data/linked_words.json")
+        ]
         
-        try:
-            if linked_words_file.exists():
-                with open(linked_words_file, 'r', encoding='utf-8') as f:
-                    linked_words = json.load(f)
-                
-                # Remove the entry
-                linked_words = [item for item in linked_words 
-                              if not (item.get("wrong") == wrong and item.get("correct") == correct)]
-                
-                # Save back to file
-                with open(linked_words_file, 'w', encoding='utf-8') as f:
-                    json.dump(linked_words, f, ensure_ascii=False, indent=2)
-                
-                return True
-        except Exception as e:
-            print(f"Error deleting linked word: {e}")
-            return False
+        for linked_words_file in possible_paths:
+            try:
+                if linked_words_file.exists():
+                    with open(linked_words_file, 'r', encoding='utf-8') as f:
+                        linked_words = json.load(f)
+                    
+                    # Remove the entry
+                    linked_words = [item for item in linked_words 
+                                  if not (item.get("wrong") == wrong and item.get("correct") == correct)]
+                    
+                    # Save back to file
+                    with open(linked_words_file, 'w', encoding='utf-8') as f:
+                        json.dump(linked_words, f, ensure_ascii=False, indent=2)
+                    
+                    return True
+            except Exception as e:
+                print(f"Error deleting linked word: {e}")
+                continue
         return False
     
     def delete_variant_word(self, canonical: str, variant: str = None):
         """Delete a variant word or entire canonical entry from the JSONL file"""
-        variants_file = Path("src/hassy_normalizer/data/hassaniya_variants.jsonl")
+        # Try multiple possible paths for deployment compatibility
+        possible_paths = [
+            Path("src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("./src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("../src/hassy_normalizer/data/hassaniya_variants.jsonl"),
+            Path("data/hassaniya_variants.jsonl"),
+            Path("./data/hassaniya_variants.jsonl")
+        ]
         
-        try:
-            if variants_file.exists():
-                variants_data = {}
-                with open(variants_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.strip():
-                            entry = json.loads(line)
-                            variants_data[entry["canonical"]] = entry["variants"]
-                
-                # Remove variant or entire canonical entry
-                if canonical in variants_data:
-                    if variant and variant in variants_data[canonical]:
-                        # Remove specific variant
-                        variants_data[canonical].remove(variant)
-                        # If no variants left, remove the canonical entry
-                        if not variants_data[canonical]:
+        for variants_file in possible_paths:
+            try:
+                if variants_file.exists():
+                    variants_data = {}
+                    with open(variants_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if line.strip():
+                                entry = json.loads(line)
+                                variants_data[entry["canonical"]] = entry["variants"]
+                    
+                    # Remove variant or entire canonical entry
+                    if canonical in variants_data:
+                        if variant and variant in variants_data[canonical]:
+                            # Remove specific variant
+                            variants_data[canonical].remove(variant)
+                            # If no variants left, remove the canonical entry
+                            if not variants_data[canonical]:
+                                del variants_data[canonical]
+                        else:
+                            # Remove entire canonical entry
                             del variants_data[canonical]
-                    else:
-                        # Remove entire canonical entry
-                        del variants_data[canonical]
-                
-                # Save back to file
-                with open(variants_file, 'w', encoding='utf-8') as f:
-                    for canonical_word, variant_list in variants_data.items():
-                        entry = {
-                            "canonical": canonical_word,
-                            "variants": variant_list
-                        }
-                        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-                
-                return True
-        except Exception as e:
-            print(f"Error deleting variant word: {e}")
-            return False
+                    
+                    # Save back to file
+                    with open(variants_file, 'w', encoding='utf-8') as f:
+                        for canonical_word, variant_list in variants_data.items():
+                            entry = {
+                                "canonical": canonical_word,
+                                "variants": variant_list
+                            }
+                            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+                    
+                    return True
+            except Exception as e:
+                print(f"Error deleting variant word: {e}")
+                continue
         return False
     
     def reset_user_stats(self, username: str) -> bool:
@@ -2171,15 +2237,20 @@ async def serve_dashboard():
         }
         
         async function loadLinkedWords() {
+            console.log('Loading linked words...');
             try {
                 const response = await fetch('/api/linked_words');
+                console.log('Linked words response status:', response.status);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Linked words data received:', data);
                     const container = document.getElementById('linkedWordsList');
                     if (container && data.linked_words) {
                         if (data.linked_words.length === 0) {
+                            console.log('No linked words found');
                             container.innerHTML = '<div style="text-align: center; color: #64748b; padding: 20px;">No linked words found</div>';
                         } else {
+                            console.log(`Displaying ${data.linked_words.length} linked words`);
                             container.innerHTML = data.linked_words
                                 .map((item, index) => `
                                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f8fafc; border-radius: 6px; margin: 6px 0; border: 1px solid #e2e8f0;">
@@ -2195,6 +2266,17 @@ async def serve_dashboard():
                             // Store the data globally for deletion
                             window.currentLinkedWords = data.linked_words;
                         }
+                    } else {
+                        console.log('Container not found or no linked_words in data');
+                        if (container) {
+                            container.innerHTML = '<div style="color: #f59e0b; padding: 12px;">No linked words data available</div>';
+                        }
+                    }
+                } else {
+                    console.error('Failed to fetch linked words, status:', response.status);
+                    const container = document.getElementById('linkedWordsList');
+                    if (container) {
+                        container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Failed to load linked words</div>';
                     }
                 }
             } catch (error) {
@@ -2207,15 +2289,20 @@ async def serve_dashboard():
         }
         
         async function loadVariantWords() {
+            console.log('Loading variant words...');
             try {
                 const response = await fetch('/api/variant_words');
+                console.log('Variant words response status:', response.status);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Variant words data received:', data);
                     const container = document.getElementById('variantWordsList');
                     if (container && data.variant_words) {
                         if (data.variant_words.length === 0) {
+                            console.log('No variant words found');
                             container.innerHTML = '<div style="text-align: center; color: #64748b; padding: 20px;">No variant words found</div>';
                         } else {
+                            console.log(`Processing ${data.variant_words.length} variant word entries`);
                             // Flatten the variant words data structure
                             const flatVariants = [];
                             data.variant_words.forEach(entry => {
@@ -2230,6 +2317,7 @@ async def serve_dashboard():
                                 }
                             });
                             
+                            console.log(`Flattened to ${flatVariants.length} individual variants`);
                             if (flatVariants.length === 0) {
                                 container.innerHTML = '<div style="text-align: center; color: #64748b; padding: 20px;">No variant words found</div>';
                             } else {
@@ -2250,6 +2338,17 @@ async def serve_dashboard():
                                 window.currentVariantWords = flatVariants;
                             }
                         }
+                    } else {
+                        console.log('Container not found or no variant_words in data');
+                        if (container) {
+                            container.innerHTML = '<div style="color: #f59e0b; padding: 12px;">No variant words data available</div>';
+                        }
+                    }
+                } else {
+                    console.error('Failed to fetch variant words, status:', response.status);
+                    const container = document.getElementById('variantWordsList');
+                    if (container) {
+                        container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Failed to load variant words</div>';
                     }
                 }
             } catch (error) {
@@ -2298,33 +2397,56 @@ async def serve_dashboard():
         }
         
         async function loadGrammarVariants() {
+            console.log('Loading grammar variants...');
             try {
                 const response = await fetch('/api/variants');
+                console.log('Grammar variants response status:', response.status);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Grammar variants data received:', data);
                     const container = document.getElementById('grammarVariantsList');
                     if (container && data.variants) {
+                        console.log(`Found ${data.variants.length} grammar variants`);
                         // Store globally for delete functionality
                         window.currentGrammarVariants = data.variants;
                         
-                        container.innerHTML = data.variants
-                            .map((variant, index) => `
-                                <div style="padding: 8px; background: #f8fafc; border-radius: 4px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <strong>${variant.word}</strong> → ${variant.suggestion}
-                                        <small style="color: #64748b; margin-left: 8px;">(by ${variant.reporter})</small>
+                        if (data.variants.length === 0) {
+                            container.innerHTML = '<div style="text-align: center; color: #64748b; padding: 20px;">No grammar variants found</div>';
+                        } else {
+                            container.innerHTML = data.variants
+                                .map((variant, index) => `
+                                    <div style="padding: 8px; background: #f8fafc; border-radius: 4px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <strong>${variant.word}</strong> → ${variant.suggestion}
+                                            <small style="color: #64748b; margin-left: 8px;">(by ${variant.reporter})</small>
+                                        </div>
+                                        <button onclick="deleteGrammarVariantByIndex(${index})" 
+                                                style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                                title="Delete this grammar variant">
+                                            Delete
+                                        </button>
                                     </div>
-                                    <button onclick="deleteGrammarVariantByIndex(${index})" 
-                                            style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;"
-                                            title="Delete this grammar variant">
-                                        Delete
-                                    </button>
-                                </div>
-                            `).join('');
+                                `).join('');
+                        }
+                    } else {
+                        console.log('Container not found or no variants in data');
+                        if (container) {
+                            container.innerHTML = '<div style="color: #f59e0b; padding: 12px;">No grammar variants data available</div>';
+                        }
+                    }
+                } else {
+                    console.error('Failed to fetch grammar variants, status:', response.status);
+                    const container = document.getElementById('grammarVariantsList');
+                    if (container) {
+                        container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Failed to load grammar variants</div>';
                     }
                 }
             } catch (error) {
                 console.error('Error loading grammar variants:', error);
+                const container = document.getElementById('grammarVariantsList');
+                if (container) {
+                    container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Error loading grammar variants</div>';
+                }
             }
         }
 
