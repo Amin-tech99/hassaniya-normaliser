@@ -313,3 +313,10 @@ cython_debug/
 test_input.txt
 test_output.txt
 smoke.txt
+
+# Local corpus and analysis artifacts
+corpora/
+tmp/
+tmp_input.txt
+tmp_output.txt
+.test_tmp/

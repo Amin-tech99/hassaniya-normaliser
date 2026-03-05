@@ -7,7 +7,7 @@ to highlight changes between original and normalized text.
 import re
 from typing import Dict, List, TypedDict
 
-from .normalizer import normalize_word
+from .normalizer import normalize_text, normalize_word
 
 
 class WordDiff(TypedDict):
@@ -62,7 +62,6 @@ def word_diff(original_text: str, normalized_text: str = None) -> List[WordDiff]
     
     # Normalize if not provided
     if normalized_text is None:
-        from .normalizer import normalize_text
         normalized_text = normalize_text(original_text)
     
     # Tokenize both texts

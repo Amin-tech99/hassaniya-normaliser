@@ -1,2 +1,0 @@
-recursive-include hassy_normalizer/data *.json *.jsonl
-global-exclude __pycache__ *.py[cod]

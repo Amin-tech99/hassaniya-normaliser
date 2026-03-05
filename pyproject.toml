@@ -9,7 +9,7 @@ description = "Hassaniya Arabic text normalizer with variant handling and letter
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Hassaniya Normalizer Team", email = "contact@example.com"}
+    {name = "Hassaniya Normalizer Contributors"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -23,12 +23,7 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "flask>=2.3.0",
     "rich>=10.0.0",
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.0.0",
-    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -36,26 +31,21 @@ dev = [
     "pytest>=7.0.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
-    "bumpver>=2023.1129",
-]
-web = [
-    "flask>=2.3.0",
-    "werkzeug>=2.3.0",
 ]
 
 [project.scripts]
 hassy-normalize = "hassy_normalizer.cli:main"
-hassy-web = "hassy_normalizer.web_ui.server:main"
+hassy-normalize-ui = "hassy_normalizer.web_ui.server:main"
 
 [project.urls]
-Homepage = "https://github.com/example/hassaniya-normalizer"
-Repository = "https://github.com/example/hassaniya-normalizer"
-Issues = "https://github.com/example/hassaniya-normalizer/issues"
+Homepage = "https://github.com/Amin-tech99/hassaniya-normaliser"
+Repository = "https://github.com/Amin-tech99/hassaniya-normaliser"
+Issues = "https://github.com/Amin-tech99/hassaniya-normaliser/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["hassy_normalizer", "hassy_normalizer.web_ui"]  # include all subpackages
-include-package-data = true              # ← KEY FLAG
+packages = ["hassy_normalizer", "hassy_normalizer.web_ui"]
+include-package-data = true
 
 [tool.setuptools.package-data]
 "hassy_normalizer" = ["data/*.json", "data/*.jsonl"]
@@ -70,25 +60,7 @@ ignore = ["E501", "S101"]
 line-length = 88
 target-version = "py39"
 
-[tool.bumpver]
-current_version = "0.1.0"
-version_pattern = "MAJOR.MINOR.PATCH"
-commit_message = "bump version {old_version} -> {new_version}"
-commit = true
-tag = true
-push = false
-
-[[tool.bumpver.files]]
-filename = "pyproject.toml"
-search = 'version = "{version}"'
-replace = 'version = "{new_version}"'
-
-[[tool.bumpver.files]]
-filename = "src/hassy_normalizer/__init__.py"
-search = '__version__ = "{version}"'
-replace = '__version__ = "{new_version}"'
-
-[[tool.bumpver.files]]
-filename = "CHANGELOG.md"
-search = "## [Unreleased]"
-replace = "## [Unreleased]\n\n## [{new_version}] - {utcnow:%Y-%m-%d}"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", ".pytest_cache", "build", "dist", "tmp", ".test_tmp", "corpora"]
+addopts = "-p no:cacheprovider"

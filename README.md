@@ -1,145 +1,135 @@
-# 🎤 Hassaniya Platform
+﻿# Hassaniya Arabic Text Normalizer
 
-A complete web platform for Hassaniya Arabic recording, normalization, and data collection with user authentication.
+Python package for normalizing Hassaniya Arabic text using variant mapping and
+letter-level rules.
 
-## ✨ Features
+## What This Project Does
 
-- **🔑 User Authentication**: Login system for authorized users (EMIN, ETHMAN, ZAIN, MOUHAMEDOU)
-- **🎙️ Audio Recording**: Record Hassaniya Arabic speech with web interface
-- **📝 Text Normalization**: Convert Hassaniya variants to standardized forms
-- **📊 User Statistics**: Track individual progress and transcription minutes
-- **📦 Data Export**: Export recordings and statistics for ML training
-- **🔄 Text Management**: Upload and manage text corpus for recording
-- **👥 Multi-user Support**: Individual progress tracking for each user
+- Normalizes known dialect variants to canonical forms.
+- Applies letter rules in a deterministic order.
+- Supports exception words that must not be transformed.
+- Supports link fix mappings for known tokenization and linking issues.
+- Includes a CLI for batch and stream processing.
+- Includes a local web UI for paste-and-review workflows.
 
-## 🚀 Quick Start
+## Install
 
-### Requirements
-- Python 3.9+
-- Modern web browser with microphone access
-
-### Installation & Startup
-
-1. **Clone or download the project**
-2. **Install dependencies:**
-   ```bash
-   pip install fastapi uvicorn pydantic pathlib
-   ```
-3. **Start the server:**
-   ```bash
-   python server.py
-   # OR use startup scripts
-   start.bat        # Windows
-   ./start.sh       # Linux/macOS
-   ```
-4. **Access the platform:**
-   - Open your browser to `http://localhost:8002`
-   - Login with one of the authorized usernames
-   - Start recording!
-
-## 👥 Authorized Users
-
-- **EMIN**
-- **ETHMAN**
-- **ZAIN**
-- **MOUHAMEDOU**
-
-## 📁 Project Structure
-
-```
-hassaniya-platform/
-├── server.py                     # Main unified server
-├── start.bat / start.sh         # Startup scripts
-├── data/
-│   └── audio/                   # Recorded audio files
-├── src/hassy_normalizer/        # Normalization engine
-│   ├── normalizer.py           # Core normalization
-│   ├── rules.py                # Normalization rules
-│   ├── diff.py                 # Diff utilities
-│   └── data/                   # Variant data files
-├── tests/                      # Test suite
-├── README.md                   # This file
-└── pyproject.toml             # Python project config
+```bash
+git clone https://github.com/Amin-tech99/hassaniya-normaliser.git
+cd hassaniya-normaliser
+python -m pip install .
 ```
 
-## 🎯 How It Works
+For development:
 
-1. **Login**: Enter your username to access the platform
-2. **Record**: Get assigned text segments to record
-3. **Submit**: Upload your audio recording with optional text edits
-4. **Track**: View your progress and statistics
-5. **Export**: Download datasets for ML training (includes audio + metadata)
+```bash
+python -m pip install -e ".[dev]"
+```
 
-## 📊 Features Available
+## CLI Usage
 
-### 🎙️ Recorder Tab
-- Load next text to record
-- Start/stop audio recording
-- Submit recordings with edited text
-- Skip paragraphs if needed
+Normalize a file:
 
-### 📝 Normalizer Tab
-- Input Hassaniya text for normalization
-- View normalized output
-- See word-level differences
+```bash
+hassy-normalize input.txt -o output.txt
+```
 
-### ⚙️ Admin Tab
-- Upload text files for recording
-- Export recordings as ZIP files
-- Export statistics and user data
-- Report text variants for improvement
+Normalize from `stdin`:
 
-### 📈 Statistics Tab
-- View platform-wide statistics
-- See individual user progress
-- Track recording minutes and completion rates
+```bash
+cat input.txt | hassy-normalize > output.txt
+```
 
-## 🔧 API Endpoints
+Show inline diff for changes:
 
-- `GET /` - Login page
-- `GET /dashboard` - Main platform interface
-- `GET /api/para/next` - Get next paragraph to record
-- `POST /api/para/{id}/submit` - Submit recorded paragraph
-- `POST /api/text/upload` - Upload text files
-- `GET /api/export/recordings` - Export recordings dataset
-- `GET /api/export/statistics` - Export statistics
-- `GET /api/audio/{filename}` - Serve audio files
+```bash
+hassy-normalize input.txt --diff --color
+```
 
-## 💾 Data Export
+## Local Web UI
 
-The platform exports data in ML-ready formats:
+Run local UI server:
 
-### Recordings Export
-- `transcriptions.jsonl` - Metadata in JSONL format (Whisper-compatible)
-- `recordings/` - Audio files in WebM format
-- `README.md` - Usage documentation
+```bash
+hassy-normalize-ui --host 127.0.0.1 --port 8765
+```
 
-### Statistics Export
-- `statistics.json` - Complete system statistics
-- `user_statistics.json` - Per-user activity data
-- `variant_reports.json` - User-reported text variants
+Then open:
 
-## 🎛️ Local Development
+```text
+http://127.0.0.1:8765
+```
 
-The platform uses in-memory storage for simplicity - no external database required. All data persists during the server session.
+UI features:
 
-### Customization
-- Edit authorized users in `server.py` (USERS list)
-- Modify normalization rules in `src/hassy_normalizer/rules.py`
-- Adjust UI styling in the HTML templates within `server.py`
+- Paste text and normalize instantly.
+- Highlight changed words in the normalized output.
+- Show change statistics (changed words, total words, percentage).
 
-## 📝 License
+## Python Usage
 
-MIT License - see LICENSE file for details.
+```python
+from hassy_normalizer import get_stats, normalize_text, normalize_word
 
-## 🤝 Contributing
+text = "sample text"
+print(normalize_text(text))
+print(normalize_word("sample"))
+print(get_stats())
+```
 
-This is a self-contained platform designed for Hassaniya Arabic data collection. Contributions welcome for:
-- Additional normalization rules
-- UI improvements
-- Export format enhancements
-- User experience optimizations
+## Rule Pipeline
 
----
+Normalization order:
 
-**Built for the Hassaniya Arabic community** 🇲🇷
+1. De-elongation (collapse noisy 3+ repeated Arabic letters)
+2. Link fixes from `linked_words.json`
+3. Variant lookup from `hassaniya_variants.jsonl`
+4. Letter rules from `rules.py` (with exceptions in `exception_words_g_q.json`)
+
+## Project Layout
+
+```text
+src/hassy_normalizer/
+  __init__.py
+  cli.py
+  data_loader.py
+  diff.py
+  normalizer.py
+  rules.py
+  web_ui/
+  data/
+scripts/
+  validate_data.py
+tests/
+```
+
+## Development
+
+Run tests:
+
+```bash
+pytest
+```
+
+Validate data files:
+
+```bash
+python scripts/validate_data.py
+```
+
+Lint and format:
+
+```bash
+ruff check src tests
+black src tests
+```
+
+## Open Source Docs
+
+- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+
+## License
+
+MIT. See [LICENSE](LICENSE).

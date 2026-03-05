@@ -1,5 +1,2 @@
-"""Web UI package for Hassaniya Normalizer."""
+"""Local web UI package for hassy-normalizer."""
 
-from .server import main
-
-__all__ = ["main"]
