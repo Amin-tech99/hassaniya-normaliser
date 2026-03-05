@@ -1,5 +1,7 @@
 """Pytest test configuration for local and CI stability."""
 
+from __future__ import annotations
+
 import os
 import shutil
 import tempfile
