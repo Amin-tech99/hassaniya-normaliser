@@ -50,6 +50,15 @@ class TestLetterRules:
             assert apply_letter_rules('قال', exc_hash) == 'قال'  # Exception
             assert apply_letter_rules('قلب', exc_hash) == 'قلب'  # Exception
             assert apply_letter_rules('قرأ', exc_hash) == 'كرأ'  # Not exception
+
+    def test_taa_haa_variant_auto_expansion(self):
+        """Words ending with ه should also match the ة form and vice versa."""
+        # Simulate JSON containing only the "ه" form
+        with patch('hassy_normalizer.rules.load_exceptions', return_value={'القضيه'}):
+            reload_exceptions()
+            assert is_exception_word('القضية') is True
+            # Step 1 should be skipped but step 2 still applies
+            assert apply_letter_rules('القضية') == 'القضيه'
     
     def test_empty_and_whitespace_words(self):
         """Test handling of empty and whitespace-only words."""
